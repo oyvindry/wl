@@ -41,7 +41,7 @@ function test_exceptions()
     try
         x=wl_dwt_impl(x, 'spline4.4',  'bd_mode', 'bd', 'prefilter_mode', 'bd_pre', 'impl_strategy', 'lifting');
     catch exc
-        assert( strcmpi(exc.identifier, 'WAVLIB:lifting_impossible') );
+        assert( strcmpi(exc.identifier, 'WL:lifting_impossible') );
     end
     
     disp('Checking that the any mode defaults to filter-based implementation for the same wavelet')

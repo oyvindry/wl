@@ -80,7 +80,7 @@ Let us go through the different pieces of this code.
 * The `wl_find_kernel` functions return two function handles:
   1. `f(x, bd_mode)` performs a one level in-place DWT on `x` with boundary mode `bd_mode`, 
   2. `prefilter(x, forward)` filters `x`, where `forward` is either 0 (postfiltering) or 1 (prefiltering). 
-* The `offset` parameter is only necessary when using boundary wavelets. It tells `dwt1_impl_internal` that there are $N-K_L$ and $N-K_R$ extra wavelets at each boundary.
+* The `offset` parameter is only necessary when using boundary wavelets. It tells `wl_dwt1_impl_internal` that there are $N-K_L$ and $N-K_R$ extra wavelets at each boundary.
 
 Since the internal functions avoid precomputation, their execution times 
 should be comparable with those of convolution, since the DWT/IDWT can be 

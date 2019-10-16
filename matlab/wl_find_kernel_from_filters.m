@@ -419,7 +419,7 @@ function [lambdas, alpha, beta, last_even] = lifting_fact(h0, h1)
     if mod(length(h0),2)==0 % L+R=1
         if length(h0)~=length(h1)
             if mod(length(h0)/2,2)==0, 
-                throw(MException('WAVLIB:lifting_impossible', 'Cant make lifting factorization'));
+                throw(MException('WL:lifting_impossible', 'Cant make lifting factorization'));
             end
         end
         
@@ -465,10 +465,10 @@ function [lambdas, alpha, beta, last_even] = lifting_fact(h0, h1)
     end
     
     if abs(length(h00)-length(h10))~=1
-        throw(MException('WAVLIB:lifting_impossible', 'Wavelet not least dissimilar'));
+        throw(MException('WL:lifting_impossible', 'Wavelet not least dissimilar'));
     end
     if abs(length(h01)-length(h11))>1
-        throw(MException('WAVLIB:lifting_impossible', 'Wavelet not least dissimilar'));
+        throw(MException('WL:lifting_impossible', 'Wavelet not least dissimilar'));
     end
     
     while length(h10)>0 & length(h01)>0
@@ -563,16 +563,26 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general
     t_L_tilde = s_L + max(Rtilde-1,-L);
     t_R_tilde = s_R + max(Rtilde-1,-L);
     
-    % Common DWT/dual DWT asserts
-    assert(s_L + s_R <= dimphi1, 'Not enough room for all modified boundary functions at lowest resolution');
+    % Common DWT/dual DWT exceptions
+    if s_L + s_R > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Not enough room for all modified boundary functions at lowest resolution'));
+    end
     
-    % DWT asserts
-    assert(t_L + Nprime <= dimphi1, 'Expressions for left boundary functions need right boundary functions');
-    assert(t_R + Nprime <= dimphi1, 'Expressions for right boundary functions need left boundary functions');
+    % DWT exceptions
+    if t_L + Nprime > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Expressions for left boundary functions need right boundary functions'));
+    end
+    if t_R + Nprime > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Expressions for right boundary functions need left boundary functions'));
+    end
     
-    % Dual DWT asserts
-    assert(t_L_tilde + Nprime <= dimphi1, 'Expressions for dual left boundary functions need right boundary functions');
-    assert(t_R_tilde + Nprime <= dimphi1, 'Expressions for dual right boundary functions need left boundary functions');
+    % Dual DWT exceptions
+    if t_L_tilde + Nprime > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Expressions for dual left boundary functions need right boundary functions'));
+    end
+    if t_R_tilde + Nprime > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Expressions for dual right boundary functions need left boundary functions'));
+    end
     
     % Mirror right hand side variables
     wav_props.A_R_pre_inv = fliplr(flipud(wav_props.A_R_pre_inv));
