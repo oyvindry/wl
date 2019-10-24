@@ -1,3 +1,5 @@
+test_dwt_different_sizes('spline4.4')
+test_bd_prefilter('spline4.4', 2, 255, 0, 4, 1);
 test_bd('spline4.4',    2, 255, 0, 4, 1);
 
 for k=0:1
@@ -186,7 +188,7 @@ function test_bd(wave_name, m, dimx, L_p_R, N, filterbased)
         impl_strategy = 'lifting';
     end
     
-    disp(sprintf('Testing bd %s with dimx=%i. %s-based', wave_name, dimx, impl_strategy));
+    disp(sprintf('Testing bd %s with dimx=%i. %s-based.', wave_name, dimx, impl_strategy));
     
     res = (1:dimx)';
     x=wl_dwt_impl(res, wave_name,  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre', 'impl_strategy', impl_strategy);
@@ -208,6 +210,24 @@ function test_bd(wave_name, m, dimx, L_p_R, N, filterbased)
     diff = max(abs(res-x));
     assert(diff < 1E-9)
 end
+
+function test_bd_prefilter(wave_name, m, dimx, L_p_R, N, filterbased)
+    if filterbased
+        impl_strategy = 'filter';
+    else
+        impl_strategy = 'lifting';
+    end
+    
+    disp(sprintf('Testing bd prefilter %s with dimx=%i. %s-based.', wave_name, dimx, impl_strategy));
+    
+    res = (1:dimx)';
+    x=wl_dwt_impl(res, wave_name,  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'filter', 'impl_strategy', impl_strategy);
+
+    x=wl_idwt_impl(x,  wave_name, 'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'filter', 'impl_strategy', impl_strategy);
+    diff = max(abs(res-x));
+    assert(diff < 1E-9)
+end
+
 
 function test_bd_db_van(N)
     for k=2:N

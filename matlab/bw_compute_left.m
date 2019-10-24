@@ -1,4 +1,4 @@
-function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde)
+function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0, C Ctilde]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde)
     symbolic = 0;
     normalize = 1;
     isortho = (isequal(g0, g0tilde) & isequal(g1, g1tilde));  
@@ -117,12 +117,12 @@ function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0]=bw_compute_left(g0, g1, N, K, g
     end
     
     if ~isortho & normalize
-        [phi1_phi1, phi1_phi2, phi2_phi2]=find_phi_grammian(L, R, K, Xe, Ze, Nprime, C, g0);
-        P1 = diag(1./sqrt(diag(phi1_phi1)));
-        P2 = diag(sqrt(diag(phi1_phi1)));
+        [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, Nprime, C, g0);
+        P1 = diag(sqrt( norm_phi_internal_squared./diag(phi1_phi1) ));
+        P2 = diag(sqrt( diag(phi1_phi1)/norm_phi_internal_squared  ));
         Xe = inv(P1)*Xe*P1;
         Ze = Ze*P1;
-        phi1_phi1 = P1*phi1_phi1*P1; phi1_phi2 = P1*phi1_phi2; % Fixed this
+        phi1_phi1 = P1*phi1_phi1*P1; 
         Xtildee = inv(P2)*Xtildee*P2;
         Ztildee = Ztildee*P2;
         C=C*P1; 
@@ -199,12 +199,11 @@ function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0]=bw_compute_left(g0, g1, N, K, g
     Xtildeo = Xtildeo*P2;
         
     if ~isortho & normalize % Normalize. Same principle as for the phi functions
-        Ypsi=find_psi_grammian(Xo(1:Nprime,:), Xo((Nprime+1):end,:), phi1_phi1, phi1_phi2, phi2_phi2);
-        P1 = diag(1./sqrt(diag(Ypsi)));
-        P2 = diag(sqrt(diag(Ypsi)));
+        [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo(1:Nprime,:), Xo((Nprime+1):end,:), phi1_phi1, C, g0, g1);
+        P1 = diag(sqrt( norm_psi_internal_squared./diag(psi1_psi1) ));
+        P2 = diag(sqrt( diag(psi1_psi1)/norm_psi_internal_squared  ));
         Xo = Xo*P1;
         Xtildeo = Xtildeo*P2;
-        % P1'*Ypsi*P1
     end
     
     % Assemble W and Wtilde
@@ -304,32 +303,40 @@ function [C,C_c]=findc(R,K,N)
     % C'*C check for orthogonality
 end
 
-function g=find_g(L, R, g0)
-    colinds = 2*((L-R+1):(R-L-1));
-    rowinds = (L + colinds(1)):(R+ colinds(end));
-    seg1 = Gsegment(g0, L:R, rowinds, colinds, 0);
-    colinds = (L-R+1):(R-L-1);
-    seg2 = Gsegment(g0, L:R, rowinds, colinds, 0);
-    [V,D] = eig(seg1'*seg2);
-    [M, I] = min(abs(diag(D)-1));
-    g = V(:, I(1));
-    g = g/sum(g);
+function x=find_x(L, R, g0)
+    J = (L-R+1):(R-L-1);
+    I = (L + J(1)):(R+ J(end));
+    seg1 = Gsegment(g0, L:R, I, 2*J, 0);
+    seg2 = Gsegment(g0, L:R, I,   J, 0);
+    [V,D] = eig((2/sum(g0)^2)*seg1'*seg2); % Modified.
+    [M, I] = min(abs(diag(D)-1));          % Find the eigenvalue closest to 1.
+    x = V(:, I(1));
+    x = x/sum(x); % Scale so that \int\phi(t)dt=1. 
 end
 
-function [Y, phi1_phi2, phi2_phi2]=find_phi_grammian(L, R, K, Xe, Ze, Nprime, C, g0)
-    g = find_g(L, R, g0);
-    matr = Gsegment(g, K + ((L-R+1):(R-L-1)), (-R+1):(2*K+R-2), 0:(K+R-2), 0);
-    phi1_phi2 = C'*matr(1:(K+R-1),:);
-    phi2_phi2 = matr((K+R):end,:);
+function [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, N, C, g0)
+    x0 = find_x(L, R, g0); x1 = (2/sum(g0)^2)*x0;
+    phi1_phi2 = C'*Gsegment(x1, (L-R+1):(R-L-1), (-R+1):(K-1), K:(K + size(Ze, 1) - 1), 0);
+    phi2_phi2 =    Gsegment(x1, (L-R+1):(R-L-1), 1:size(Ze, 1) , 1:size(Ze, 1), 0);
+    norm_phi_internal_squared = x0(R-L);
     
-    rhs = (Ze(1:size(phi2_phi2,1),:))'*phi2_phi2*(Ze(1:size(phi2_phi2,2),:)) + Xe'*phi1_phi2*(Ze(1:size(phi1_phi2,2),:)) + (Xe'*phi1_phi2*(Ze(1:size(phi1_phi2,2),:)))';
-    ls = eye(Nprime^2) - kron(Xe',Xe');
-    rs = reshape(rhs, [Nprime^2, 1]);
-    Y  = reshape(ls\rs, [Nprime, Nprime]);
+    combined = Xe'*phi1_phi2*Ze;
+    rhs = Ze'*phi2_phi2*Ze + combined + combined';
+    ls = eye(N^2) - (2/sum(g0)^2)*kron(Xe',Xe'); % Modified
+    rs = reshape(rhs, [N^2, 1]);
+    phi1_phi1 = reshape(ls\rs, [N, N]);
 end
 
-function Ypsi=find_psi_grammian(Xo, Zo, phi1_phi1, phi1_phi2, phi2_phi2)
-    Ypsi = (Xo(1:size(phi1_phi1,1),:))'*phi1_phi1*Xo(1:size(phi1_phi1,2),:) + (Zo(1:size(phi2_phi2,1),:))'*phi2_phi2*(Zo(1:size(phi2_phi2,2),:)) + Xo'*phi1_phi2*(Zo(1:size(phi1_phi2,2),:)) + (Xo'*phi1_phi2*(Zo(1:size(phi1_phi2,2),:)))';
+function [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo, Zo, phi1_phi1, C, g0, g1)
+    x0 = find_x(L, R, g0); x1 = (2/sum(g0)^2)*x0;
+    phi1_phi2 = C'*Gsegment(x1, (L-R+1):(R-L-1), (-R+1):(K-1), K:(K + size(Zo, 1) - 1), 0);
+    phi2_phi2 =    Gsegment(x1, (L-R+1):(R-L-1), 1:size(Zo, 1) , 1:size(Zo, 1), 0);
+    
+    seg=Gsegment(x1, (L-R+1):(R-L-1), 1:length(g1), 1:length(g1), 0);
+    norm_psi_internal_squared = g1*seg*g1';
+    
+    combined = Xo'*phi1_phi2*Zo;
+    psi1_psi1 = (2/sum(g0)^2)*Xo'*phi1_phi1*Xo + Zo'*phi2_phi2*Zo + combined + combined';
 end
 
 function [L,U]=lu_nopivot(A)
@@ -339,15 +346,5 @@ function [L,U]=lu_nopivot(A)
         L(:,k) = A(:,k) /A(k,k);
         U(k,:) = A(k,:);
         A = A - L(:,k)*U(k,:);
-    end
-end
-
-function A=luimpl_banded(A)
-    d = (size(A,1)-1)/2;
-    n = size(A,2);
-    for k=1:(n-1)
-        % s = min(k + 1 + d, n);
-        A((d+2):end,k) = A((d+2):end,k) /A(d+1,k);
-        A((d+2):end,(k+1):end) = A((d+2):end,(k+1):end) - A((d+2):end,k)*A(d+1,(k+1):end);
     end
 end

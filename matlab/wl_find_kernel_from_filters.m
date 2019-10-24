@@ -51,44 +51,38 @@ function [f, prefilter, offset_L, offset_R]=find_kernel_from_filters(g0, N, h0, 
         opts.dual = ~opts.dual;
     end
     if opts.dual 
-        [dual_wav_props, wav_props, WLtilde, WL, WRtilde, WR]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy);
+        [dual_wav_props, wav_props, WLtilde, WL, WRtilde, WR]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode);
     else
-        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy);
+        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode);
     end
     offset_L = wav_props.offset_L;
     offset_R = wav_props.offset_R;
     
     if strcmpi(opts.bd_mode, 'bd') % tail handling matrices have not been computed yet
         if forward
-            % dual_wav_props.A_L=zeros(size(WLtilde)); dual_wav_props.A_R=zeros(size(WRtilde));
-            
-            fnew = @(x, bdm) x;
             if strcmpi(opts.impl_strategy, 'lifting')
                 fnew = @(x, bdm) idwt_kernel_lifting(x, bdm, dual_wav_props);
             elseif strcmpi(opts.impl_strategy, 'filter')
                 fnew = @(x, bdm) idwt_kernel_filters(x, bdm, dual_wav_props);
             end
-
             [dual_wav_props.A_L,dual_wav_props.A_R]=find_AL_AR(WLtilde, WRtilde, dual_wav_props, fnew); % fnew is Gtilde
             f = find_kernel_general(opts.prefilter_mode, opts.impl_strategy, @(x, bdm) dwt_kernel_lifting(x, bdm, dual_wav_props), @(x, bdm) dwt_kernel_filters(x, bdm, dual_wav_props));
-
         else
-            % wav_props.A_L=zeros(size(WL)); wav_props.A_R=zeros(size(WR));
-            
-            fnew = @(x, bdm) x;
             if strcmpi(opts.impl_strategy, 'lifting')
                 fnew = @(x, bdm) idwt_kernel_lifting(x, bdm, wav_props);
             elseif strcmpi(opts.impl_strategy, 'filter')
                 fnew = @(x, bdm) idwt_kernel_filters(x, bdm, wav_props);
             end
-            
             [wav_props.A_L,wav_props.A_R]=find_AL_AR(WL, WR, wav_props, fnew); % fnew is G
-            f= find_kernel_general(opts.prefilter_mode, opts.impl_strategy, @(x, bdm) idwt_kernel_lifting(x, bdm, wav_props), @(x, bdm) idwt_kernel_filters(x, bdm, wav_props));
+            f = find_kernel_general(opts.prefilter_mode, opts.impl_strategy, @(x, bdm) idwt_kernel_lifting(x, bdm, wav_props), @(x, bdm) idwt_kernel_filters(x, bdm, wav_props));
         end
         if strcmpi(opts.prefilter_mode, 'bd_pre') 
             prefilter = @(x, fwd) precond_impl(x, fwd, wav_props);
         elseif strcmpi(opts.prefilter_mode, 'filter')
+            [wav_props.filtermatr, wav_props.d] = compute_filter_matrix(wav_props, N, max(N,Ntilde), length_signal);
             prefilter = @(x, fwd) prefilter_impl(x, fwd, wav_props);
+        elseif ~strcmpi(opts.prefilter_mode, 'none')
+            throw(MException('WL:illegal_parameters', sprintf('Illegal prefiltering mode: %s', opts.prefilter_mode)));
         end
     else
         if forward
@@ -98,7 +92,6 @@ function [f, prefilter, offset_L, offset_R]=find_kernel_from_filters(g0, N, h0, 
         end
     end
 end
-
 
 function [A_L,A_R]=find_AL_AR(WL, WR, wp, f)
     WL = double(WL); WR= double(WR);
@@ -264,17 +257,58 @@ function x=precond_impl(x, forward, wp)
     end
 end
 
-% todo
-function x=prefilter_impl_impl(x, forward, wp)
-    n = size(wp.A_L_pre_inv,1);
-    if forward == 1
-        x(1:n,:)           = wp.A_L_pre_inv\x(1:n,:);
-        x((end-n+1):end,:) = wp.A_R_pre_inv\x((end-n+1):end,:);
+function x=prefilter_impl(x, forward, wp) 
+   if forward == 1
+        x=solve_A(wp.filtermatr, x, wp.d);
     else
-        x(1:n,:)           = wp.A_L_pre_inv*x(1:n,:);
-        x((end-n+1):end,:) = wp.A_R_pre_inv*x((end-n+1):end,:);
+        x=multiply_A(wp.filtermatr, x, wp.d);
     end
 end
+
+% Assumes that A is obtained from luimpl_banded(A, d)
+function x=solve_A(A, b, d)
+    z=rforwardsolve(A, b, d);
+    x=rbacksolve(A, z, d);
+end
+
+function b=multiply_A(A, x, d)
+    n = size(x,1);
+    z = x;
+    for k=1:n
+        currentrow = mod(k - 1, 2*d + 1) + 1;
+        uk=min(n,k+d);
+        z(k,:) = A(currentrow, k:uk)*x(k:uk,:);
+    end
+    b = z;
+    for k=2:n
+        currentrow = mod(k - 1, 2*d + 1) + 1;
+        lk = max(1,k-d);
+        b(k,:) = A(currentrow, lk:(k-1))*z(lk:(k-1),:) + z(k,:);
+    end
+end
+
+function x=rforwardsolve(A, b, d)
+    n=size(b,1); x=b;
+    x(1,:)=b(1,:);
+    for k=2:n
+        currentrow = mod(k - 1, 2*d + 1) + 1;
+        lk=max(1,k-d);
+        x(k,:)=b(k,:)-A(currentrow,lk:(k-1))*x(lk:(k-1),:);
+    end
+end
+   
+function x=rbacksolve(A, b, d)
+    n=size(b, 1); x=b;
+    x(n,:)=b(n,:)/A(mod(n - 1, 2*d + 1) + 1,n);
+    for k=n-1:-1:1
+        currentrow = mod(k - 1, 2*d + 1) + 1;
+        uk=min(n,k+d);
+        x(k,:)=(b(k,:)-A(currentrow,(k+1):uk)*x((k+1):uk,:))/A(currentrow,k);
+    end
+end
+
+
+
 
 function x=lifting_even_symm(lambda1, x, bd_mode)
     N = size(x, 1);
@@ -350,7 +384,7 @@ end
 
 
 
-function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, m, bd_mode, length_signal, impl_strategy)
+function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, m, bd_mode, length_signal, impl_strategy, prefilter_mode)
     % Computes the properties of a wavelet with a given set of filters. What properties 
     % are computed depend on the bd_mode parameter, m, and length_signal.
     %
@@ -364,10 +398,7 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_fr
     %            'bd'     - Boundary wavelets
     % length_signal: Length of the input signal. Default: 0.
     % impl_strategy: lifting, filter, any (default)
-
-    if (~exist('m','var')) m = 1; end
-    if (~exist('bd_mode','var')) bd_mode = 'symm'; end
-    if (~exist('length_signal','var')) length_signal = 0; end
+     
     wav_props.m = m; dual_wav_props.m = m;
     wav_props.length_signal = length_signal; dual_wav_props.length_signal = length_signal;
     wav_props.offset_L = 0; dual_wav_props.offset_L = 0;
@@ -376,11 +407,32 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_fr
     dual_wav_props.g0 = flip(h0); dual_wav_props.g1 =flip(h1);
     wav_props.N = N; dual_wav_props.N = Ntilde;
     wav_props.swap = 0; dual_wav_props.swap = 0;
-    % check perfect reconstruction
+    
+    % Compute values of scaling function at the integers
+    [wav_props.L,wav_props.R]=findsupports(wav_props.g0);
+    inds = (wav_props.L+1):(wav_props.R-1);
+    matr=Gsegment(wav_props.g0, wav_props.L:wav_props.R, 2*inds, inds, 0);
+    eigval = sum(wav_props.g0)/2;
+    wav_props.phivals = null(matr-eigval*eye(size(matr)));
+    % assert(size(wav_props.phivals,2)==1);
+    wav_props.phivals = wav_props.phivals/sum(wav_props.phivals);
+    % wav_props.phivals
+    
+    % Compute values of dual scaling function at the integers
+    [dual_wav_props.L,dual_wav_props.R]=findsupports(dual_wav_props.g0);
+    inds = (dual_wav_props.L+1):(dual_wav_props.R-1);
+    matr=Gsegment(dual_wav_props.g0, dual_wav_props.L:dual_wav_props.R, 2*inds, inds, 0);
+    eigval = sum(dual_wav_props.g0)/2;
+    dual_wav_props.phivals = null(matr-eigval*eye(size(matr)));
+    % assert(size(dual_wav_props.phivals,2)==1); %TODO: This assert kicks in for pwl0
+    dual_wav_props.phivals = dual_wav_props.phivals/sum(dual_wav_props.phivals);
+    % dual_wav_props.phivals
+     
+    % TODO: check perfect reconstruction
     
     WL = 0; WLtilde = 0; WR = 0; WRtilde = 0;
     if strcmpi(bd_mode, 'bd')
-        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde] = wav_props_general(N, Ntilde, wav_props, dual_wav_props); 
+        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde] = wav_props_general(N, Ntilde, wav_props, dual_wav_props, prefilter_mode); 
     end 
     
     if strcmpi(impl_strategy,'lifting')
@@ -521,66 +573,64 @@ function [L,R]=findsupports(g0)
     end
 end
 
-function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general(N, Ntilde, wav_props, dual_wav_props)
+function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general(N, Ntilde, wav_props, dual_wav_props, prefilter_mode)
     Nprime = max(N, Ntilde);
-    [L,R]=findsupports(wav_props.g0);
-    [Ltilde,Rtilde]=findsupports(dual_wav_props.g0);
     
     % Define K and Ktilde so that they satisfy the requirements of Definition 3.1.
-    K_L = max(-L,N); 
-    K_L_tilde = max(-Ltilde,Ntilde);
-    if K_L-N < K_L_tilde-Ntilde
-        K_L = K_L_tilde-Ntilde + N;
+    wav_props.K_L = max(-wav_props.L,N); 
+    dual_wav_props.K_L = max(-dual_wav_props.L,Ntilde);
+    if wav_props.K_L-N < dual_wav_props.K_L - Ntilde
+        wav_props.K_L = dual_wav_props.K_L - Ntilde + N;
     end
-    if K_L-N > K_L_tilde-Ntilde
-        K_L_tilde = K_L-N+Ntilde;
+    if wav_props.K_L-N > dual_wav_props.K_L-Ntilde
+        dual_wav_props.K_L = wav_props.K_L-N+Ntilde;
     end
-    K_R = K_L;
-    K_R_tilde = K_L_tilde;
+    wav_props.K_R      = wav_props.K_L;
+    dual_wav_props.K_R = dual_wav_props.K_L;
     
     % Make sure that K and Ktilde satisfy the requirement of Theorem 6.2, and are as equal as possible.
-    s = wav_props.length_signal + R + L - 2*N - 1 + K_L + K_R;
+    s = wav_props.length_signal + wav_props.R + wav_props.L - 2*N - 1 + wav_props.K_L + wav_props.K_R;
     if mod(s,2^wav_props.m) > 0
         toadd = 2^wav_props.m - mod(s,2^wav_props.m);
-        K_L = K_L + floor(toadd/2); K_L_tilde = K_L_tilde + floor(toadd/2);
-        K_R = K_R + ceil(toadd/2);  K_R_tilde = K_R_tilde + ceil(toadd/2);
+        wav_props.K_L = wav_props.K_L + floor(toadd/2); dual_wav_props.K_L = dual_wav_props.K_L + floor(toadd/2);
+        wav_props.K_R = wav_props.K_R + ceil(toadd/2);  dual_wav_props.K_R = dual_wav_props.K_R + ceil(toadd/2);
     end
     
     % Set offsets
-    wav_props.offset_L = K_L - N; wav_props.offset_R = K_R - N; dual_wav_props.offset_L = wav_props.offset_L; dual_wav_props.offset_R = wav_props.offset_R;
+    wav_props.offset_L = wav_props.K_L - N; wav_props.offset_R = wav_props.K_R - N; dual_wav_props.offset_L = wav_props.offset_L; dual_wav_props.offset_R = wav_props.offset_R;
     
     % The left edge
-    [WL, WLtilde, wav_props.A_L_pre_inv, dual_wav_props.A_L_pre_inv, N0L] = bw_compute_left(wav_props.g0, wav_props.g1, N, K_L, dual_wav_props.g0, dual_wav_props.g1, Ntilde, K_L_tilde);
+    [WL, WLtilde, wav_props.A_L_pre_inv, dual_wav_props.A_L_pre_inv, N0L, wav_props.CL, dual_wav_props.CL] = bw_compute_left(wav_props.g0, wav_props.g1, N, wav_props.K_L, dual_wav_props.g0, dual_wav_props.g1, Ntilde, dual_wav_props.K_L);
     
     % The right edge
-    [WR, WRtilde, wav_props.A_R_pre_inv, dual_wav_props.A_R_pre_inv, N0R] = bw_compute_left(flip(wav_props.g0), flip(wav_props.g1), N, K_R, flip(dual_wav_props.g0), flip(dual_wav_props.g1), Ntilde, K_R_tilde);
+    [WR, WRtilde, wav_props.A_R_pre_inv, dual_wav_props.A_R_pre_inv, N0R, wav_props.CR, dual_wav_props.CR] = bw_compute_left(flip(wav_props.g0), flip(wav_props.g1), N, wav_props.K_R, flip(dual_wav_props.g0), flip(dual_wav_props.g1), Ntilde, dual_wav_props.K_R);
 
-    dimphi1 = 2^(1-wav_props.m)*wav_props.length_signal + (1-2^(1-wav_props.m))*(2*N-L-R-K_L-K_R+1); % Equation (6.4)
-    s_L = K_L - N + 2*max(Nprime,N0L);
-    s_R = K_R - N + 2*max(Nprime,N0R);
-    t_L = s_L + max(R-1,-Ltilde); 
-    t_R = s_R + max(R-1,-Ltilde);
-    t_L_tilde = s_L + max(Rtilde-1,-L);
-    t_R_tilde = s_R + max(Rtilde-1,-L);
+    dimphi1 = 2^(1-wav_props.m)*wav_props.length_signal + (1-2^(1-wav_props.m))*(2*N-wav_props.L-wav_props.R-wav_props.K_L-wav_props.K_R+1); % Equation (6.4)
+    wav_props.s_L = wav_props.K_L - N + 2*max(Nprime,N0L); dual_wav_props.s_L = wav_props.s_L;
+    wav_props.s_R = wav_props.K_R - N + 2*max(Nprime,N0R); dual_wav_props.s_R = wav_props.s_R;
+    wav_props.t_L = wav_props.s_L + max(wav_props.R-1,-dual_wav_props.L); 
+    wav_props.t_R = wav_props.s_R + max(wav_props.R-1,-dual_wav_props.L);
+    dual_wav_props.t_L = dual_wav_props.s_L + max(dual_wav_props.R-1,-wav_props.L);
+    dual_wav_props.t_R = dual_wav_props.s_R + max(dual_wav_props.R-1,-wav_props.L);
     
     % Common DWT/dual DWT exceptions
-    if s_L + s_R > dimphi1
+    if wav_props.s_L + wav_props.s_R > dimphi1
         throw(MException('WL:bd_toomanylevels', 'Not enough room for all modified boundary functions at lowest resolution'));
     end
     
     % DWT exceptions
-    if t_L + Nprime > dimphi1
+    if wav_props.t_L + Nprime > dimphi1
         throw(MException('WL:bd_toomanylevels', 'Expressions for left boundary functions need right boundary functions'));
     end
-    if t_R + Nprime > dimphi1
+    if wav_props.t_R + Nprime > dimphi1
         throw(MException('WL:bd_toomanylevels', 'Expressions for right boundary functions need left boundary functions'));
     end
     
     % Dual DWT exceptions
-    if t_L_tilde + Nprime > dimphi1
-        throw(MException('WL:bd_toomanylevels', 'Expressions for dual left boundary functions need right boundary functions'));
+    if dual_wav_props.t_L + Nprime > dimphi1
+        throw(MException('WL:bd_toomanylevels', 'Expressions for dual left boundary functions need right boundary functions')); % TODO: Check these only in case of the dual transform
     end
-    if t_R_tilde + Nprime > dimphi1
+    if dual_wav_props.t_R + Nprime > dimphi1
         throw(MException('WL:bd_toomanylevels', 'Expressions for dual right boundary functions need left boundary functions'));
     end
     
@@ -588,12 +638,61 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general
     wav_props.A_R_pre_inv = fliplr(flipud(wav_props.A_R_pre_inv));
     dual_wav_props.A_R_pre_inv = fliplr(flipud(dual_wav_props.A_R_pre_inv));
     WR = fliplr(flipud(WR)); WRtilde = flipud(fliplr(WRtilde));
-    if L+R==1
-        for k = (size(WR,2)-(K_R-N)):(-2):1
+    if wav_props.L+wav_props.R==1
+        for k = (size(WR,2)-(wav_props.K_R-N)):(-2):1
             WR(:, [k-1 k]) = WR(:, [k k-1]);
         end
-        for k = (size(WRtilde,2)-(K_R-N)):(-2):1
+        for k = (size(WRtilde,2)-(wav_props.K_R-N)):(-2):1
             WRtilde(:, [k-1 k]) = WRtilde(:, [k k-1]);
         end
+    end
+end
+
+function [filtermatr,d]=compute_filter_matrix(wp, N, Nprime, length_signal)
+    % in phibvals (left or right) a column will contain the values of a boundary function evaluated at [K-N,K+R-2]
+    phibvals_left  = Gsegment(wp.phivals, (wp.L+1):(wp.R-1), (-N+1):(wp.R-1),           (2 - wp.K_L - wp.R):0, 0) * wp.CL; % TODO: Does not handle N~=Ntilde. 
+    phibvals_right = Gsegment(wp.phivals, (wp.L+1):(wp.R-1), (-N+1+wp.L+wp.R):(wp.R-1), (2 - wp.K_R - wp.R):0, 0) * wp.CR;
+    phibvals_right = phibvals_right( end:(-1):1, end:(-1):1); % Now contains values evaluated at M - [K-N+L+R,K+R-2].
+    
+    d = max( [-wp.L,N,wp.R]);
+    modval = 2*d+1;
+    filtermatr = zeros( modval, length_signal);
+    
+    % Set function values into filtermatr
+    filtermatr( 1:(N+wp.R-1), 1:Nprime) = phibvals_left;
+    for k=(Nprime+1):(length_signal- Nprime)
+        filtermatr( mod(k - 1 + (( wp.L + 1):(wp.R - 1)), modval) + 1, k) = wp.phivals;
+    end
+    rowinds = mod( length_signal + ((wp.L - N + 2):0) - 1, modval) + 1;
+    filtermatr( rowinds, (end - Nprime + 1):end ) = phibvals_right;
+    
+    filtermatr=luimpl_banded( filtermatr, d);
+end
+
+% The following functions assume that the bandwidth is d, and that the (i,j) entry is stored in A_{mod(i,2*d+1),j}
+function A=luimpl_banded(A, d)
+    n = size(A,2);
+    for k=1:(n-1)
+        currentrow = mod(k - 1, 2*d + 1) + 1;
+        rows = mod( (k+1):(min(k + d, n)) - 1, 2*d + 1) + 1;
+        cols = (k+1):(min(k + d, n));
+        A( rows, k)       = A(rows,k) /A(currentrow, k);
+        A( rows, cols) = A(rows, cols) - A(rows, k)*A(currentrow, cols);
+    end
+end
+
+% Following function also in bw_compute_left
+function val=Gsegment(g0,supp,rowrange,colrange,symbolic)
+    if symbolic 
+        val = sym(zeros(length(rowrange),length(colrange)));
+    else
+        val = zeros(length(rowrange),length(colrange));
+    end
+    k=1;
+    for col_ind = colrange
+        actualinds =  supp + col_ind;
+        [intersec,i1,i2] = intersect(rowrange,actualinds);
+        val(i1,k) = g0( actualinds(i2) - actualinds(1) + 1 );
+        k = k+1;
     end
 end
