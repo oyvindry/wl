@@ -13,7 +13,7 @@ function x=wl_idwt1_impl_internal(x, f, prefilter, offsets, varargin)
     opts = wl_setopts('wave_name', 'unknown', 'dims', 1, varargin{:});
     
     [x, resstart, resend] = reorganize_coeffs_reverse(x, opts.m, offsets, opts.data_layout);
-    x(resstart(opts.m+1):2^opts.m:resend(opts.m+1),:) = prefilter(x(resstart(opts.m+1):2^opts.m:resend(opts.m+1),:), 1);
+    % x(resstart(opts.m+1):2^opts.m:resend(opts.m+1),:) = prefilter(x(resstart(opts.m+1):2^opts.m:resend(opts.m+1),:), 1);
     for res = (opts.m - 1):(-1):0
         inds = resstart(res+1):2^res:resend(res+1);
         x(inds, :) = f(x(inds, :), opts.bd_mode);

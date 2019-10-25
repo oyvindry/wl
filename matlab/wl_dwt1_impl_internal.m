@@ -18,7 +18,7 @@ function x=wl_dwt1_impl_internal(x, f, prefilter, offsets, varargin)
         x(inds, :) = f(x(inds, :), opts.bd_mode);
         inds = inds((offsets(1,1)+1):2:(end-offsets(1,2)));
     end
-    x(inds, :) = prefilter(x(inds, :),0);
+    % x(inds, :) = prefilter(x(inds, :),0);
     x = reorganize_coeffs_forward(x, opts.m, offsets, opts.data_layout);
 end
 

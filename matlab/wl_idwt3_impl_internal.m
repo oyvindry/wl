@@ -16,7 +16,7 @@ function x=wl_idwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilt
     
     % postconditioning
     indsx = resstart(1,opts.m+1):2^opts.m:resend(1,opts.m+1); indsy = resstart(2,opts.m+1):2^opts.m:resend(2,opts.m+1); indsz = resstart(3,opts.m+1):2^opts.m:resend(3,opts.m+1);
-    x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), @(x,bdm) prefilterz(x, 1), opts.bd_mode);
+    % x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), @(x,bdm) prefilterz(x, 1), opts.bd_mode);
 
     for res = (opts.m - 1):(-1):0
         indsx = resstart(1,res+1):2^res:resend(1,res+1); 

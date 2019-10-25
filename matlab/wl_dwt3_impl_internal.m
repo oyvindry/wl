@@ -25,7 +25,7 @@ function x = wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefil
     end
     
     % postconditioning
-    x(indsx, indsy, indsz,:) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), @(x,bdm) prefilterz(x, 0), opts.bd_mode);  
+    % x(indsx, indsy, indsz,:) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), @(x,bdm) prefilterz(x, 0), opts.bd_mode);  
     
     x = reorganize_coeffs3_forward(x, opts.m, offsets, opts.data_layout);   
 end

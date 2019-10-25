@@ -15,7 +15,7 @@ function x=idwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, varar
     [x, resstart, resend] = reorganize_coeffs2_reverse(x, opts.m, offsets, opts.data_layout);
     % postconditioning
     indsx = resstart(1,opts.m+1):2^opts.m:resend(1,opts.m+1); indsy = resstart(2,opts.m+1):2^opts.m:resend(2,opts.m+1);
-    x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), opts.bd_mode);
+    % x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), opts.bd_mode);
 
     for res = (opts.m - 1):(-1):0
         indsx = resstart(1,res+1):2^res:resend(1,res+1); 
