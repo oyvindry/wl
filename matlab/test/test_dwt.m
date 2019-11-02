@@ -1,6 +1,9 @@
+test_bd('spline2.6',    2, 255, 0, 4, 1);
+test_bd('spline2.4',    2, 255, 0, 4, 1);
+test_bd('spline4.4',    2, 255, 0, 4, 1);
+
 test_dwt_different_sizes('spline4.4')
 test_bd_prefilter('spline4.4', 2, 255, 0, 4, 1);
-test_bd('spline4.4',    2, 255, 0, 4, 1);
 
 for k=0:1
     for dimx=127:129
@@ -208,7 +211,7 @@ function test_bd(wave_name, m, dimx, L_p_R, N, filterbased)
     assert( maxval < 1E-6);
     x=wl_idwt_impl(x,  wave_name, 'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre', 'impl_strategy', impl_strategy);
     diff = max(abs(res-x));
-    assert(diff < 1E-9)
+    assert(diff < 1E-7)
 end
 
 function test_bd_prefilter(wave_name, m, dimx, L_p_R, N, filterbased)
