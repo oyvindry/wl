@@ -105,13 +105,13 @@ function [g0,h0]=compute_spline_filters(N, Ntilde)
   vals=compute_QN(Navg);
   
   h0 = 1;
-  for k=1:(N/2)
+  for k=1:(Ntilde/2)
     h0=conv(h0,[1/4 1/2 1/4]);
   end
   h0 = conv(h0, vals);
   
   g0=1;
-  for k=1:(Ntilde/2)
+  for k=1:(N/2)
     g0=conv(g0,[1/4 1/2 1/4]);
   end
   
