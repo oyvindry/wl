@@ -1,13 +1,11 @@
-function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0, C Ctilde]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde)
+function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde)
     symbolic = 0;
     normalize = 1;
     isortho = (isequal(g0, g0tilde) & isequal(g1, g1tilde));  
-    A_pre_inv = eye(N);
-    Atilde_pre_inv = eye(Ntilde);
     Nprime = max(N,Ntilde);
     [L,R]=findsupports(g0);
     [Ltilde,Rtilde]=findsupports(g0tilde);
-    N0=max( [ceil((Nprime+N-K-1+R)/2) ceil((Nprime+N-K-1+Rtilde)/2) R Rtilde]); % Equation (5.1)
+    N0=max( [ceil((2*N-K-1+Rtilde)/2) ceil((2*Ntilde-Ktilde-1+R)/2) R Rtilde]); % Equation (5.1)
     
     S = [1:(K-N+R) (K-N+R+2):2:(K-N-R+2*N0)]; S = S'; % Defined in Lemma 5.2
     Stilde = [1:(Ktilde-Ntilde+Rtilde) (Ktilde-Ntilde+Rtilde+2):2:(Ktilde-Ntilde-Rtilde+2*N0)]; Stilde = Stilde';
@@ -18,132 +16,87 @@ function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0, C Ctilde]=bw_compute_left(g0, g
     Ttilde = max(Ttilde, Nprime);
 
     % Find initial boundary functions
-    G_I_X = Gsegment(g0,L:R,(-R+1):(K-1),(-2*R+2):2:(2*K-2), symbolic); % Defined in Lemma 4.1
-    G_I_Z = Gsegment(g0,L:R,K:(2*K+R-2),(-2*R+2):2:(2*K-2), symbolic);
-    [C,C_c]=findc(R,K,N);
-    if ~symbolic
-        C = double(C);
-    end
+    G_I_X = Gsegment(g0, L:R, (-R+1):(K-1), 2*((-R+1):(K-1)), symbolic); % Defined in Lemma 4.1
+    G_I_Z = Gsegment(g0, L:R, K:(2*K+R-2),  2*((-R+1):(K-1)), symbolic);
+    [C,C_c]=findc(R, K, N, symbolic);
     Xe = inv(C'*C)*C'* G_I_X *C; % Equation (4.2). Replace inv(C'*C)*C' with transpose if matrix is orthogonal.
     Ze = G_I_Z*C;
     
-    G_I_X = Gsegment(g0tilde,Ltilde:Rtilde,(-Rtilde+1):(Ktilde-1),(-2*Rtilde+2):2:(2*Ktilde-2), symbolic);
-    G_I_Z = Gsegment(g0tilde,Ltilde:Rtilde,Ktilde:(2*Ktilde+Rtilde-2),(-2*Rtilde+2):2:(2*Ktilde-2), symbolic);
-    [Ctilde,C_ctilde]=findc(Rtilde,Ktilde,Ntilde);
-    if ~symbolic
-        Ctilde = double(Ctilde);
-    end
+    G_I_X = Gsegment(g0tilde, Ltilde:Rtilde, (-Rtilde+1):(Ktilde-1),     2*((-Rtilde+1):(Ktilde-1)), symbolic);
+    G_I_Z = Gsegment(g0tilde, Ltilde:Rtilde, Ktilde:(2*Ktilde+Rtilde-2), 2*((-Rtilde+1):(Ktilde-1)), symbolic);
+    [Ctilde,C_ctilde]=findc(Rtilde, Ktilde, Ntilde, symbolic);
     Xtildee = inv(Ctilde'*Ctilde)*Ctilde'*G_I_X *Ctilde;
     Ztildee = G_I_Z*Ctilde;
     
-    % Make phi staggered
+    % Make phi and phitilde staggered
     [Qmatr,Rmatr] = qr((flipud(C((R+K-N):end,:)))');
-    P = fliplr(Qmatr);
-    invP = flipud(Qmatr');
-    
-    
-    %[Lmatr,Umatr] = lu((flipud(C((R+K-N):end,:)))');% old
-    %invP = flipud(Lmatr');
-    %P = inv(invP);
-    Xe = inv(P)*Xe*P;
-    Ze = Ze*P;
-    if N == Ntilde
-        A_pre_inv = C((K+R-N):end,:)*P;
-    end
-    C=C*P;
-    
-    % Make phitilde staggered
+    P1 = fliplr(Qmatr);
     [Qmatr,Rmatr] = qr((flipud(Ctilde((Rtilde+Ktilde-Ntilde):end,:)))');
-    P = fliplr(Qmatr);
-    invP = flipud(Qmatr');
-    
-    %[Lmatr,Umatr] = lu((flipud(Ctilde((Rtilde+Ktilde-Ntilde):end,:)))'); % old code
-    %invP = flipud(Lmatr');
-    %P = inv(invP);
-    Xtildee = inv(P)*Xtildee*P;
-    Ztildee = Ztildee*P;
-    if N == Ntilde
-        Atilde_pre_inv = Ctilde((Ktilde+Rtilde-Ntilde):end,:)*P;
-    end
-    Ctilde=Ctilde*P;
-    
-    % Address when Ntilde and N are different
-    if Ntilde > N    
-        G_I_Xp = Gsegment(g0,L:R,(2*K+L):(Ktilde-1),(2*K):2:(2*Ktilde-2), symbolic); % Defined in Lemma 4.2
-        Z_I_Xp = Gsegment(g0,L:R,Ktilde:(2*Ktilde+R-2),(2*K):2:(2*Ktilde-2), symbolic);
-        
-        Xe = [Xe; Ze(1:(Ntilde-N),:)];
-        Xe = [Xe [zeros(K+L+N,Ntilde-N); G_I_Xp]]; % Equation (4.7)
-        [Ze,Z_I_Xp] = expand_cols_smallest(Ze((Ntilde-N+1):end,:), Z_I_Xp);
-        Ze = [Ze Z_I_Xp]; % Equation (4.8)
-    elseif N > Ntilde
-        G_I_Xp = Gsegment(g0tilde,Ltilde:Rtilde,(2*Ktilde+Ltilde):(K-1),(2*Ktilde):2:(2*K-2), symbolic);
-        Z_I_Xp = Gsegment(g0tilde,Ltilde:Rtilde,K:(2*K+Rtilde-2),(2*Ktilde):2:(2*K-2), symbolic);
-        
-        Xtildee = [Xtildee; Ztildee(1:(N-Ntilde),:)];
-        Xtildee = [Xtildee [zeros(Ktilde+Ltilde+Ntilde,N-Ntilde); G_I_Xp]];
-        [Ztildee,Z_I_Xp] = expand_cols_smallest(Ztildee((N-Ntilde+1):end,:), Z_I_Xp);
-        Ztildee = [Ztildee Z_I_Xp];
-    end
+    P2 = fliplr(Qmatr);
+    [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
     
     % Bi-orthogonalize phi and phitilde
-    ls = eye(Nprime^2) - kron(Xe',Xtildee');
     
-    [Ze,Ztildee]=expand_cols_smallest(Ze,Ztildee);
-    rs = reshape(Ztildee'*Ze, [Nprime^2, 1]);
-    Y  = reshape(ls\rs, [Nprime, Nprime]); % Solve Equation (4.12)
-    Y=Y';
+    if Ntilde == N
+        [Ze,Ztildee]=expand_cols_smallest(Ze,Ztildee);
+        rhs = Ze'*Ztildee;
+    elseif Ntilde > N  % Address when Ntilde and N are different
+        [Ze1,Ze2]=expand_cols_smallest( Ze( (Ntilde-N+1):end, :), Ztildee);
+        [zefirst,Ctildelast]=expand_cols_smallest(Ze, Ctilde( (end-(Ntilde-N)+1):end, :));
+        rhs2 = zefirst'*Ctildelast*Xtildee; % TODO: May excedd diemsnions
+        rhs = Ze1'*Ze2 + rhs2;
+    else
+        [Ze1,Ze2]=expand_cols_smallest( Ze, Ztildee( (N-Ntilde+1):end, :));
+        rhs2 = Xe'*C( (end-(N-Ntilde)+1):end, :)'*Ztildee( 1:(N-Ntilde), :);  % TODO
+        rhs = Ze1'*Ze2 + rhs2;
+    end
+    
+    ls = eye(N*Ntilde) - kron(Xe',Xtildee');
+    rs = reshape(rhs', N*Ntilde, 1);
+    Y  = reshape(ls\rs, Ntilde, N); % Solve Equation (4.12)
+    Y=Y'; % Gramm matrix found
     
     if isortho
         P1 = inv(chol(Y));
         P2 = P1;
     else
         [Lmatr,Umatr]= lu_nopivot(Y);
+        if Ntilde>N
+            Umatr( (end-(Ntilde-N)+1):end, : ) = Ctilde( (end-(Ntilde-N)+1):end, :);
+        elseif N>Ntilde
+            Lmatr( :, (end-(N-Ntilde)+1):end ) = C( (end-(N-Ntilde)+1):end, : )';
+        end
+        
         P1 = (inv(Lmatr))';
         P2 = inv(Umatr);
     end    
-    Xe = inv(P1)*Xe*P1;
-    Ze = Ze*P1;
-    Xtildee = inv(P2)*Xtildee*P2;
-    Ztildee = Ztildee*P2;
-    C=C*P1; 
-    Ctilde=Ctilde*P2;
-    % Y=P1'*Y*P2
     
-    
-    if N == Ntilde
-        A_pre_inv = A_pre_inv*P1; A_pre_inv = double(A_pre_inv);
-        Atilde_pre_inv = Atilde_pre_inv*P2; Atilde_pre_inv = double(Atilde_pre_inv);
-    end
+    [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
     
     if ~isortho & normalize
-        [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, Nprime, C, g0);
-        P1 = diag(sqrt( norm_phi_internal_squared./diag(phi1_phi1) ));
-        P2 = diag(sqrt( diag(phi1_phi1)/norm_phi_internal_squared  ));
-        Xe = inv(P1)*Xe*P1;
-        Ze = Ze*P1;
-        phi1_phi1 = P1*phi1_phi1*P1; 
-        Xtildee = inv(P2)*Xtildee*P2;
-        Ztildee = Ztildee*P2;
-        C=C*P1; 
-        Ctilde=Ctilde*P2;
-        % Y=P1'*Y*P2
-    
-        if N == Ntilde
-            A_pre_inv = A_pre_inv*P1; A_pre_inv = double(A_pre_inv);
-            Atilde_pre_inv = Atilde_pre_inv*P2; Atilde_pre_inv = double(Atilde_pre_inv);
+        [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, N, C, g0);
+        P1 = eye(N); P2 = eye(Ntilde);
+        for k=1:min(N,Ntilde)
+            P1(k,k) = sqrt(norm_phi_internal_squared/phi1_phi1(k,k));
+            P2(k,k) = sqrt(phi1_phi1(k,k)/norm_phi_internal_squared);
         end
+        
+        phi1_phi1 = P1*phi1_phi1*P1;
+        [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
+        C = double(C); Ctilde=double(Ctilde); % Work numerically from now on.
     end
     
-    % psi-funksjoner
+    % Mother wavelets
+    
+    [Xe,Xtildee]=expand_cols_smallest([Xe; Ze],[Xtildee; Ztildee]);
     
     % Construct Xo
-    newcols = Gsegment(g0, L:R, 0:(2*T + K - N + R), K - N + 2*(Nprime:T), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest([Xe;Ze], newcols);
+    newcols = Gsegment(g0, (L:R) + K - N, 0:(2*T + K - N + R), 2*(N:T), symbolic);
+    [Rmatr, newcols] = expand_cols_smallest(Xe, newcols);
     G = [Rmatr newcols];
     
-    newcols = Gsegment(g0tilde, Ltilde:Rtilde, 0:(2*T + K - N + Rtilde),K - N + 2*(Nprime:T), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest([Xtildee;Ztildee], newcols);
+    newcols = Gsegment(g0tilde, (Ltilde:Rtilde) + K - N, 0:(2*T + K - N + Rtilde), 2*(Ntilde:T), symbolic);
+    [Rmatr, newcols] = expand_cols_smallest(Xtildee, newcols);
     Gtilde = [Rmatr newcols];
     
     lastmatr = G*(Gtilde(S,:))';
@@ -161,12 +114,12 @@ function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0, C Ctilde]=bw_compute_left(g0, g
     Xo = Xo*P;
     
     % Construct Xtildeo
-    newcols = Gsegment(g0tilde, Ltilde:Rtilde, 0:(2*Ttilde + K - N + Rtilde), K - N + 2*(Nprime:Ttilde), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest([Xtildee;Ztildee], newcols);
+    newcols = Gsegment(g0tilde, (Ltilde:Rtilde) + K - N, 0:(2*Ttilde + K - N + Rtilde), 2*(Ntilde:Ttilde), symbolic);
+    [Rmatr, newcols] = expand_cols_smallest(Xtildee, newcols);
     Gtilde = [Rmatr newcols];
     
-    newcols = Gsegment(g0, L:R, 0:(2*Ttilde + K - N + R), K - N + 2*(Nprime:Ttilde), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest([Xe;Ze], newcols);
+    newcols = Gsegment(g0, (L:R) + K - N, 0:(2*Ttilde + K - N + R), 2*(N:Ttilde), symbolic);
+    [Rmatr, newcols] = expand_cols_smallest(Xe, newcols);
     G = [Rmatr newcols];
     
     lastmatr = Gtilde*(G(Stilde,:))';
@@ -197,24 +150,46 @@ function [W,Wtilde,A_pre_inv,Atilde_pre_inv, N0, C Ctilde]=bw_compute_left(g0, g
     end
     Xo = Xo*P1;
     Xtildeo = Xtildeo*P2;
-        
+    
     if ~isortho & normalize % Normalize. Same principle as for the phi functions
-        [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo(1:Nprime,:), Xo((Nprime+1):end,:), phi1_phi1, C, g0, g1);
+        [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo(1:N,:), Xo((N+1):end,:), phi1_phi1, C, g0, g1);
         P1 = diag(sqrt( norm_psi_internal_squared./diag(psi1_psi1) ));
         P2 = diag(sqrt( diag(psi1_psi1)/norm_psi_internal_squared  ));
         Xo = Xo*P1;
         Xtildeo = Xtildeo*P2;
     end
     
+    % Define preconditioning matrices
+    if Ntilde>N
+        C = [C zeros(size(C,1),Ntilde-N);zeros(Ntilde-N,N) eye(Ntilde-N)];
+    elseif Ntilde<N
+        Ctilde = [Ctilde zeros(size(Ctilde,1),N-Ntilde); zeros(N-Ntilde,Ntilde) eye(N-Ntilde)];
+    end
+    A_pre_inv = C( (end-Nprime+1):end, (end-Nprime+1):end );
+    Atilde_pre_inv = Ctilde( (end-Nprime+1):end, (end-Nprime+1):end );
+    
     % Assemble W and Wtilde
-    Xe = [Xe; Ze]; Xtildee = [Xtildee; Ztildee];
-    W=     assembleW(Xe,      Xo,      g0, L:R,           g1, (-Rtilde):(-Ltilde), K - N, Nprime, N0, symbolic);
-    Wtilde=assembleW(Xtildee, Xtildeo, g0tilde, Ltilde:Rtilde, g1tilde, (-R):(-L),           K - N, Nprime, N0, symbolic);
+    [Xe, Xo] = expand_cols_smallest(Xe, Xo); X = [Xe Xo];
+    W=     assembleW(Xe,      Xo,      g0,      L:R,           g1,      (-Rtilde):(-Ltilde), K - N, N,      N0, symbolic);
+    
+    [Xtildee, Xtildeo] = expand_cols_smallest(Xtildee, Xtildeo); Xtilde = [Xtildee Xtildeo];
+    Wtilde=assembleW(Xtildee, Xtildeo, g0tilde, Ltilde:Rtilde, g1tilde, (-R):(-L),           K - N, Ntilde, N0, symbolic);
+    
     [W, Wtilde]=expand_cols_smallest(W, Wtilde);
     % only dyadic fractions?
     % Wtilde % only dyadic fractions?
-    %res = W'*Wtilde; % Should be identity matrix
+    % res = W'*Wtilde; % Should be identity matrix
 end    
+
+function [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2)
+    Xe = inv(P1)*Xe*P1;
+    Ze = Ze*P1;
+    C  = C*P1;
+    
+    Xtildee = inv(P2)*Xtildee*P2;
+    Ztildee = Ztildee*P2;
+    Ctilde  = Ctilde*P2;
+end
 
 function [L,R]=findsupports(g0)
      % Find L, R, from g0
@@ -227,29 +202,28 @@ function [L,R]=findsupports(g0)
     end
 end
 
-function W=assembleW(Xe, Xo, g0, suppg0, g1, suppg1, KminN, Nprime, N0, symbolic)
-    [Xe, Xo] = expand_cols_smallest(Xe, Xo);
-    numcols = KminN + 2*max(Nprime,N0);
+function W=assembleW(Xe, Xo, g0, suppg0, g1, suppg1, KminN, N, N0, symbolic)
+    numcols = KminN + 2*max(N,N0);
     if symbolic
         W = sym(zeros(size(Xe,1),numcols));
     else
         W = zeros(size(Xe,1),numcols);
     end
     W(:,1:(KminN)) = Xo(:,1:(KminN));                       % K-N psi-functions at the beginning.
-    W(:,KminN     + 2*(1:N0))     = Xo(:,(KminN+1):end);  % the remaining psi-functions
-    W(:,KminN - 1 + 2*(1:Nprime)) = Xe;                 % all phi functions
+    W(:,KminN     + 2*(1:N0)) = Xo(:,(KminN+1):end);  % the remaining psi-functions
+    W(:,KminN - 1 + 2*(1:N))  = Xe;                 % all phi functions
     
-    if Nprime > N0  % Add internal psi-functions in W
+    if N > N0  % Add internal psi-functions in W
         % Add coordinates of \bpsi_{0,N_0},...,\bpsi_{0,N'-1}^b in phi_1^b. These come at columns (K-N+2N0+1):(K-N+2(N'-1)+1)
-        insertpsi = Gsegment(g1, suppg1, 0:(KminN + 2*(Nprime-1) + 1 + suppg1(end)), KminN + 2*(N0:(Nprime-1)) + 1, symbolic);
+        insertpsi = Gsegment(g1, suppg1, 0:(KminN + 2*(N-1) + 1 + suppg1(end)), KminN + 2*(N0:(N-1)) + 1, symbolic);
         [W, insertpsi] = expand_cols_smallest(W, insertpsi);
-        W( :, KminN + 2*(N0:(Nprime-1)) + 2) = insertpsi;
+        W( :, KminN + 2*(N0:(N-1)) + 2) = insertpsi;
     end
-    if N0 > Nprime % Add internal phi-functions in W
+    if N0 > N % Add internal phi-functions in W
         % Add coordinates of \bphi_{0,N'},...,\bphi_{0,N0-1}^b in phi_1^b. These come at columns (K-N+2N'):(K-N+2(N0-1))
-        insertphi = Gsegment(g0, suppg0, 0:(KminN + 2*N0-2 + suppg0(end)), KminN + 2*(Nprime:(N0-1)), symbolic);
+        insertphi = Gsegment(g0, suppg0, 0:(KminN + 2*(N0-1) + suppg0(end)), KminN + 2*(N:(N0-1)), symbolic);
         [W, insertphi] = expand_cols_smallest(W, insertphi);
-        W( :, KminN + 2*(Nprime:(N0-1)) + 1) = insertphi;
+        W( :, KminN + 2*(N:(N0-1)) + 1) = insertphi;
     end
 end
 
@@ -278,7 +252,7 @@ function val=Gsegment(g0,supp,rowrange,colrange,symbolic)
     end
 end
 
-function [C,C_c]=findc(R,K,N)
+function [C,C_c]=findc(R,K,N, symbolic)
     C_c = sym(zeros(N));
     C_c(1,1) = sym(1);
 
@@ -298,8 +272,10 @@ function [C,C_c]=findc(R,K,N)
     end
 
     C = C_0*C_c;
-    C = double(C);
-    C_c = double(C_c);
+    if ~symbolic
+        C = double(C);
+        C_c = double(C_c);
+    end
     % C'*C check for orthogonality
 end
 
@@ -323,8 +299,8 @@ function [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Z
     combined = Xe'*phi1_phi2*Ze;
     rhs = Ze'*phi2_phi2*Ze + combined + combined';
     ls = eye(N^2) - (2/sum(g0)^2)*kron(Xe',Xe'); % Modified
-    rs = reshape(rhs, [N^2, 1]);
-    phi1_phi1 = reshape(ls\rs, [N, N]);
+    rs = reshape(rhs, N^2, 1);
+    phi1_phi1 = reshape(ls\rs, N, N);
 end
 
 function [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo, Zo, phi1_phi1, C, g0, g1)
@@ -340,11 +316,17 @@ function [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo, Z
 end
 
 function [L,U]=lu_nopivot(A)
-    n = size(A,1);
-    L = zeros(n); U = zeros(n);
-    for k=1:n
+    [m,n] = size(A); s= min(m,n);
+    L = zeros(m,s); U = zeros(s,n);
+    for k=1:s
         L(:,k) = A(:,k) /A(k,k);
         U(k,:) = A(k,:);
         A = A - L(:,k)*U(k,:);
+    end
+    if m>n
+        L = [L [zeros(n,m-n); eye(m-n)]];
+    end
+    if m<n
+        U = [U; [zeros(n-m,m) eye(n-m)]];
     end
 end
