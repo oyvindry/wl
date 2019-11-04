@@ -51,9 +51,9 @@ function [f, prefilter, offset_L, offset_R]=find_kernel_from_filters(g0, N, h0, 
         opts.dual = ~opts.dual;
     end
     if opts.dual 
-        [dual_wav_props, wav_props, WLtilde, WL, WRtilde, WR]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode);
+        [dual_wav_props, wav_props, WLtilde, WL, WRtilde, WR]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode, opts.symbolic);
     else
-        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode);
+        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, opts.m, opts.bd_mode, length_signal, opts.impl_strategy, opts.prefilter_mode, opts.symbolic);
     end
     offset_L = wav_props.offset_L;
     offset_R = wav_props.offset_R;
@@ -384,7 +384,7 @@ end
 
 
 
-function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, m, bd_mode, length_signal, impl_strategy, prefilter_mode)
+function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_from_filters(g0, g1, N, h0, h1, Ntilde, m, bd_mode, length_signal, impl_strategy, prefilter_mode, symbolic)
     % Computes the properties of a wavelet with a given set of filters. What properties 
     % are computed depend on the bd_mode parameter, m, and length_signal.
     %
@@ -432,7 +432,7 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=find_wav_props_fr
     
     WL = 0; WLtilde = 0; WR = 0; WRtilde = 0;
     if strcmpi(bd_mode, 'bd')
-        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde] = wav_props_general(wav_props, dual_wav_props, prefilter_mode); 
+        [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde] = wav_props_general(wav_props, dual_wav_props, prefilter_mode, symbolic); 
     end 
     
     if strcmpi(impl_strategy,'lifting')
@@ -573,7 +573,7 @@ function [L,R]=findsupports(g0)
     end
 end
 
-function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general(wav_props, dual_wav_props, prefilter_mode)
+function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general(wav_props, dual_wav_props, prefilter_mode, symbolic)
     Nprime = max(wav_props.N, dual_wav_props.N);
     
     % Define K and Ktilde so that they satisfy the requirements of Definition 3.1.
@@ -600,10 +600,10 @@ function [wav_props, dual_wav_props, WL, WLtilde, WR, WRtilde]=wav_props_general
     wav_props.offset_L = wav_props.K_L - wav_props.N; wav_props.offset_R = wav_props.K_R - wav_props.N; dual_wav_props.offset_L = wav_props.offset_L; dual_wav_props.offset_R = wav_props.offset_R;
     
     % The left edge
-    [WL, WLtilde, wav_props.A_L_pre_inv, dual_wav_props.A_L_pre_inv, N0L, wav_props.CL, dual_wav_props.CL] = bw_compute_left(wav_props.g0, wav_props.g1, wav_props.N, wav_props.K_L, dual_wav_props.g0, dual_wav_props.g1, dual_wav_props.N, dual_wav_props.K_L);
+    [WL, WLtilde, wav_props.A_L_pre_inv, dual_wav_props.A_L_pre_inv, N0L, wav_props.CL, dual_wav_props.CL] = bw_compute_left(wav_props.g0, wav_props.g1, wav_props.N, wav_props.K_L, dual_wav_props.g0, dual_wav_props.g1, dual_wav_props.N, dual_wav_props.K_L, symbolic);
     
     % The right edge
-    [WR, WRtilde, wav_props.A_R_pre_inv, dual_wav_props.A_R_pre_inv, N0R, wav_props.CR, dual_wav_props.CR] = bw_compute_left(flip(wav_props.g0), flip(wav_props.g1), wav_props.N, wav_props.K_R, flip(dual_wav_props.g0), flip(dual_wav_props.g1), dual_wav_props.N, dual_wav_props.K_R);
+    [WR, WRtilde, wav_props.A_R_pre_inv, dual_wav_props.A_R_pre_inv, N0R, wav_props.CR, dual_wav_props.CR] = bw_compute_left(flip(wav_props.g0), flip(wav_props.g1), wav_props.N, wav_props.K_R, flip(dual_wav_props.g0), flip(dual_wav_props.g1), dual_wav_props.N, dual_wav_props.K_R, symbolic);
 
     dimphi1 = 2^(1-wav_props.m)*wav_props.length_signal + (1-2^(1-wav_props.m))*(2*wav_props.N-wav_props.L-wav_props.R-wav_props.K_L-wav_props.K_R+1); % Equation (6.4)
     wav_props.s_L = wav_props.K_L - wav_props.N + 2*max(Nprime,N0L); dual_wav_props.s_L = wav_props.s_L;
