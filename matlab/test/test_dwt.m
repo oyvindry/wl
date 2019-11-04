@@ -1,23 +1,28 @@
-test_bd('spline2.6',    2, 255, 0, 4, 1);
-test_bd('spline2.4',    2, 255, 0, 4, 1);
-test_bd('spline4.4',    2, 255, 0, 4, 1);
+newmax = 0;
+newmax=test_bd('spline4.4', 2, 255, 0, 4, 'filter', 'filter', newmax);
+newmax=test_bd('spline2.6',    2, 255, 0, 2, 'filter', 'bd_pre', newmax);
+newmax=test_bd('spline2.4',    2, 255, 0, 2, 'filter', 'bd_pre', newmax);
+newmax=test_bd('spline4.4',    2, 255, 0, 4, 'filter', 'bd_pre', newmax);
 
 test_dwt_different_sizes('spline4.4')
-test_bd_prefilter('spline4.4', 2, 255, 0, 4, 1);
 
 for k=0:1
+    impl_strategy = 'filter';
+    if k==0
+        impl_strategy = 'lifting';
+    end
     for dimx=127:129
         m = log2(64/(2*2));
-        test_bd('spline53', m, dimx, 0, 2, k);
-        test_bd('pwl2',     m, dimx, 0, 2, k);
+        newmax=test_bd('spline53', m, dimx, 0, 2, impl_strategy, 'bd_pre', newmax);
+        newmax=test_bd('pwl2',     m, dimx, 0, 2, impl_strategy, 'bd_pre', newmax);
     
         m = log2(64/(2*4));
-        test_bd('cdf97',    m, dimx, 0, 4, k);
+        newmax=test_bd('cdf97',    m, dimx, 0, 4, impl_strategy, 'bd_pre', newmax);
     end
 
     for dimx=126:128
         m = log2(64/(2*4));
-        test_bd('db4',      m, dimx, 1, 4, k);
+        newmax=test_bd('db4',      m, dimx, 1, 4, impl_strategy, 'bd_pre', newmax);
     end
 end
 
@@ -35,10 +40,12 @@ test_dwt_different_sizes('haar')
 test_dwt_different_sizes('spline4.4')
 test_simple_dwt2()
 test_haar()
-test_bd_db_van(4)
+newmax=test_bd_db_van(4, 'lifting', 'bd_pre', newmax);
 
-test_spline44()
+newmax=test_bd('spline4.4', 2, 65, 0, 4, 'filter', 'bd_pre', newmax);
 test_exceptions()
+
+disp(sprintf('Highest deviation %0.5e', newmax))
 
 function test_exceptions()
     disp('Checking that a lifting-based implementation for a wavelet that is not least dissimilar returns the expected error')
@@ -184,18 +191,9 @@ function test_simple_dwt2()
     assert(diff ~= 0 && diff < 1E-13)
 end
 
-function test_bd(wave_name, m, dimx, L_p_R, N, filterbased)
-    if filterbased
-        impl_strategy = 'filter';
-    else
-        impl_strategy = 'lifting';
-    end
+function newmax=test_bd(wave_name, m, dimx, L_p_R, N, impl_strategy, prefilter_mode, newmax)
+    disp(sprintf('Testing bd %s with dimx=%i. %s-based. prefilter mode %s', wave_name, dimx, impl_strategy, prefilter_mode));
     
-    disp(sprintf('Testing bd %s with dimx=%i. %s-based.', wave_name, dimx, impl_strategy));
-    
-    res = (1:dimx)';
-    x=wl_dwt_impl(res, wave_name,  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre', 'impl_strategy', impl_strategy);
-
     res2 = dimx + L_p_R - 1;
     res3 = mod(res2, 2^m);
     if res3 == 0 
@@ -203,62 +201,24 @@ function test_bd(wave_name, m, dimx, L_p_R, N, filterbased)
     else
         toadd = 2^m - res3;
     end
-    % toadd is K_L+K_R-2*N
-    
     dimphi0 =  2^(-m)*dimx + (1-2^(-m))*(1 - toadd - L_p_R);
-    %x((dimphi0+1):end)
-    maxval = max(abs(x((dimphi0+1):end)));
-    assert( maxval < 1E-6);
-    x=wl_idwt_impl(x,  wave_name, 'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre', 'impl_strategy', impl_strategy);
-    diff = max(abs(res-x));
-    assert(diff < 1E-7)
-end
-
-function test_bd_prefilter(wave_name, m, dimx, L_p_R, N, filterbased)
-    if filterbased
-        impl_strategy = 'filter';
-    else
-        impl_strategy = 'lifting';
+    
+    for s=0:(N-1)
+        res = ((1:dimx).^s)';
+        x=wl_dwt_impl(res, wave_name,  'm', m, 'bd_mode', 'bd', 'prefilter_mode', prefilter_mode, 'impl_strategy', impl_strategy);
+        maxval = max(abs(x((dimphi0+1):end))); newmax=max([newmax,maxval]);
+        disp(sprintf('highest detail: %0.5e', maxval));
+        x=wl_idwt_impl(x,  wave_name, 'm', m, 'bd_mode', 'bd', 'prefilter_mode', prefilter_mode, 'impl_strategy', impl_strategy);
+        diff = max(abs(res-x)); newmax=max([newmax,diff]);
+        disp(sprintf('highest diff: %0.5e', diff));
     end
-    
-    disp(sprintf('Testing bd prefilter %s with dimx=%i. %s-based.', wave_name, dimx, impl_strategy));
-    
-    res = (1:dimx)';
-    x=wl_dwt_impl(res, wave_name,  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'filter', 'impl_strategy', impl_strategy);
-
-    x=wl_idwt_impl(x,  wave_name, 'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'filter', 'impl_strategy', impl_strategy);
-    diff = max(abs(res-x));
-    assert(diff < 1E-9)
 end
 
 
-function test_bd_db_van(N)
+function newmax=test_bd_db_van(N, impl_strategy, prefilter_mode, newmax)
+    m=2;
     for k=2:N
-        disp(sprintf('Testing bd db%i',k))
-        m = floor(log2(64/(2*k+1))); % Max number of levels
-        for s=0:(k-1)
-            res = ((1:64).^s)';
-            x = wl_dwt_impl (res, sprintf('db%i',k),  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre');
-            maxval = max(abs(x((64/2^m+1):64)));
-            assert( maxval < 1E-7)
-            x = wl_idwt_impl(x,   sprintf('db%i',k), 'm', m,  'bd_mode', 'bd', 'prefilter_mode', 'bd_pre');
-            diff = max(abs(res-x));
-            assert(diff ~= 0 && diff < 1E-7)
-        end
-    end
-end
-
-function test_spline44()
-    disp('Testing spline4.4')
-    m = 2;
-    for s=0:3
-        res = ((1:65).^s)';
-        x=wl_dwt_impl(res, 'spline4.4', 'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre');
-        maxval = max(abs(x((64/2^m+2):65)));
-        assert( maxval < 0.02)
-        x=wl_idwt_impl(x, 'spline4.4',  'm', m, 'bd_mode', 'bd', 'prefilter_mode', 'bd_pre');
-        diff = max(abs(res-x));
-        assert(diff ~= 0 && diff < 1E-6)
+        newmax=test_bd(sprintf('db%i',k), m, 64, 1, k, impl_strategy, prefilter_mode, newmax);
     end
 end
 
