@@ -25,12 +25,16 @@ function opts=wl_setopts(varargin)
     % data_layout:    How data should be assembled. Possible modes are:
     %                 'resolution': Lowest resolution first (default)
     %                 'time': Sort according to time
-    % impl_strategy:  Optional. How the kernel should be implemented. Possible modes are:
+    % impl_strategy:  How the kernel should be implemented. Possible modes are:
     %                 'lifting'. Apply a lifting-based procedure. An error is returned if the filters can't be factored in terms of elementary lifting steps.
     %                 'filter'. Apply a filter-based procedure. This mode works for any wavelet.
     %                 'any' (default). With this setting the library will find the optimal implementation on its own. 
     %                 As a rule of thumb, a lifting-based implementation is applied for wavelets with least dissimilar filters. 
     %                 Otherwise a filter-based implementation is applied.
+    % symbolic        Whether symbolic computation should be attempted when computing the boundary coefficients. Defaults to 1 for spline wavelets. 
+    %                 Setting this to 1 will increase the precomputation time considerably. 
+    % staggered       Whether staggered supports should be made
+    % polbasis        Which polynomial basis to use. Bernstein, Gramm.
     
     % Parse input arguments. Set default parameters
     opts.dims = 0;          
@@ -41,6 +45,9 @@ function opts=wl_setopts(varargin)
     opts.data_layout = 'resolution';
     opts.impl_strategy = 'any';
     opts.wave_name = 'unknown';
+    opts.symbolic = 0;
+    opts.staggered = 1;
+    opts.polbasis = 'gramm';
     
     args = varargin;
     if ~iscell(args)
@@ -117,6 +124,27 @@ function opts=wl_setopts(varargin)
                         else 
                             opts.bd_mode = 'symm';
                         end
+                    end
+                end
+            end
+            if strcmpi(args{i},'symbolic')
+                if i+1 <= nbr_args
+                    if isnumeric(args{i+1})
+                        opts.symbolic = args{i+1};
+                    end
+                end
+            end
+            if strcmpi(args{i},'staggered')
+                if i+1 <= nbr_args
+                    if isnumeric(args{i+1})
+                        opts.staggered = args{i+1};
+                    end
+                end
+            end
+            if strcmpi(args{i},'polbasis')
+                if i+1 <= nbr_args
+                    if ischar(args{i+1})
+                        opts.polbasis = args{i+1};
                     end
                 end
             end
