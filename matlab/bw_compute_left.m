@@ -1,5 +1,4 @@
-function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde)
-    symbolic = 0;
+function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0, g1, N, K, g0tilde, g1tilde, Ntilde, Ktilde, symbolic)
     normalize = 1;
     isortho = (isequal(g0, g0tilde) & isequal(g1, g1tilde));  
     Nprime = max(N,Ntilde);
@@ -29,9 +28,9 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     Ztildee = G_I_Z*Ctilde;
     
     % Make phi and phitilde staggered
-    [Qmatr,Rmatr] = qr((flipud(C((R+K-N):end,:)))');
+    [Qmatr,Rmatr] = qr_exact((flipud(C((R+K-N):end,:)))', symbolic);
     P1 = fliplr(Qmatr);
-    [Qmatr,Rmatr] = qr((flipud(Ctilde((Rtilde+Ktilde-Ntilde):end,:)))');
+    [Qmatr,Rmatr] = qr_exact((flipud(Ctilde((Rtilde+Ktilde-Ntilde):end,:)))', symbolic);
     P2 = fliplr(Qmatr);
     [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
     
@@ -43,11 +42,12 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     elseif Ntilde > N  % Address when Ntilde and N are different
         [Ze1,Ze2]=expand_cols_smallest( Ze( (Ntilde-N+1):end, :), Ztildee);
         [zefirst,Ctildelast]=expand_cols_smallest(Ze, Ctilde( (end-(Ntilde-N)+1):end, :));
-        rhs2 = zefirst'*Ctildelast*Xtildee; % TODO: May excedd diemsnions
+        rhs2 = zefirst'*Ctildelast*Xtildee; 
         rhs = Ze1'*Ze2 + rhs2;
     else
         [Ze1,Ze2]=expand_cols_smallest( Ze, Ztildee( (N-Ntilde+1):end, :));
-        rhs2 = Xe'*C( (end-(N-Ntilde)+1):end, :)'*Ztildee( 1:(N-Ntilde), :);  % TODO
+        [ztildeefirst,Clast]=expand_cols_smallest(Ztildee, C( (end-(N-Ntilde)+1):end, :)); % Check
+        rhs2 = Xe'*Clast'*ztildeefirst,
         rhs = Ze1'*Ze2 + rhs2;
     end
     
@@ -60,7 +60,7 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
         P1 = inv(chol(Y));
         P2 = P1;
     else
-        [Lmatr,Umatr]= lu_nopivot(Y);
+        [Lmatr,Umatr]= lu_nopivot(Y, symbolic);
         if Ntilde>N
             Umatr( (end-(Ntilde-N)+1):end, : ) = Ctilde( (end-(Ntilde-N)+1):end, :);
         elseif N>Ntilde
@@ -73,30 +73,15 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     
     [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
     
-    if ~isortho & normalize
-        [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, N, C, g0);
-        P1 = eye(N); P2 = eye(Ntilde);
-        for k=1:min(N,Ntilde)
-            P1(k,k) = sqrt(norm_phi_internal_squared/phi1_phi1(k,k));
-            P2(k,k) = sqrt(phi1_phi1(k,k)/norm_phi_internal_squared);
-        end
-        
-        phi1_phi1 = P1*phi1_phi1*P1;
-        [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1,P2);
-        C = double(C); Ctilde=double(Ctilde); % Work numerically from now on.
-    end
-    
     % Mother wavelets
-    
-    [Xe,Xtildee]=expand_cols_smallest([Xe; Ze],[Xtildee; Ztildee]);
     
     % Construct Xo
     newcols = Gsegment(g0, (L:R) + K - N, 0:(2*T + K - N + R), 2*(N:T), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest(Xe, newcols);
+    [Rmatr, newcols] = expand_cols_smallest([Xe; Ze], newcols);
     G = [Rmatr newcols];
     
     newcols = Gsegment(g0tilde, (Ltilde:Rtilde) + K - N, 0:(2*T + K - N + Rtilde), 2*(Ntilde:T), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest(Xtildee, newcols);
+    [Rmatr, newcols] = expand_cols_smallest([Xtildee; Ztildee], newcols);
     Gtilde = [Rmatr newcols];
     
     lastmatr = G*(Gtilde(S,:))';
@@ -106,7 +91,7 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     Xo = idmatr - lastmatr;
     
     % Make psi staggered
-    [Rmatr,jb] = rref(double((flipud(Xo))'));
+    [Rmatr,jb] = rref_exact((flipud(Xo))', symbolic);
     jb = sort(size(Xo,1) + 1 - jb);
     [Lmatr,Umatr,Pmatr] = lu((flipud(Xo(jb,:)))');
     invP = flipud(Lmatr'*Pmatr);
@@ -115,11 +100,11 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     
     % Construct Xtildeo
     newcols = Gsegment(g0tilde, (Ltilde:Rtilde) + K - N, 0:(2*Ttilde + K - N + Rtilde), 2*(Ntilde:Ttilde), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest(Xtildee, newcols);
+    [Rmatr, newcols] = expand_cols_smallest([Xtildee; Ztildee], newcols);
     Gtilde = [Rmatr newcols];
     
     newcols = Gsegment(g0, (L:R) + K - N, 0:(2*Ttilde + K - N + R), 2*(N:Ttilde), symbolic);
-    [Rmatr, newcols] = expand_cols_smallest(Xe, newcols);
+    [Rmatr, newcols] = expand_cols_smallest([Xe; Ze], newcols);
     G = [Rmatr newcols];
     
     lastmatr = Gtilde*(G(Stilde,:))';
@@ -129,7 +114,7 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     Xtildeo = idmatr - lastmatr;
     
     % Make psitilde staggered
-    [Rmatr,jb] = rref(double((flipud(Xtildeo))'));
+    [Rmatr,jb] = rref_exact(double((flipud(Xtildeo))'), symbolic);
     jb = sort(size(Xtildeo,1) + 1 - jb);
     [Lmatr,Umatr,Pmatr] = lu((flipud(Xtildeo(jb,:)))');
     invP = flipud(Lmatr'*Pmatr);
@@ -144,29 +129,39 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
         P1 = inv(chol(Y));
         P2 = P1;
     else
-        [Lmatr,Umatr]=lu_nopivot(Y);
+        [Lmatr,Umatr]=lu_nopivot(Y, symbolic);
         P1 = (inv(Lmatr))';
         P2 = inv(Umatr);
     end
     Xo = Xo*P1;
     Xtildeo = Xtildeo*P2;
     
-    if ~isortho & normalize % Normalize. Same principle as for the phi functions
+    if ~isortho & normalize % Normalize. First phi-functions, then psi-functions. Work numerically from now on.
+        Xe = double(Xe); Ze = double(Ze); C = double(C);
+        Xtildee = double(Xtildee); Ztildee = double(Ztildee); Ctilde = double(Ctilde);
+        [phi1_phi1, norm_phi_internal_squared]=find_phi_grammian(L, R, K, Xe, Ze, N, C, g0);
+        P1phi = eye(N); P2phi = eye(Ntilde);
+        for k=1:min(N,Ntilde)
+            P1phi(k,k) = sqrt(norm_phi_internal_squared/phi1_phi1(k,k));
+            P2phi(k,k) = sqrt(phi1_phi1(k,k)/norm_phi_internal_squared);
+        end
+        phi1_phi1 = P1phi*phi1_phi1*P1phi;
+        [Xe,Ze,C,Xtildee,Ztildee,Ctilde]=update_vars(Xe,Ze,C,Xtildee,Ztildee,Ctilde,P1phi,P2phi);
+    
+        Xo = double(Xo); 
+        Xo(1:min(N,Ntilde),:) =           double(P2phi(1:min(N,Ntilde),1:min(N,Ntilde))*Xo(1:min(N,Ntilde),:));
+        Xtildeo(1:min(N,Ntilde),:) = double(P1phi(1:min(N,Ntilde),1:min(N,Ntilde))*Xtildeo(1:min(N,Ntilde),:)); 
         [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo(1:N,:), Xo((N+1):end,:), phi1_phi1, C, g0, g1);
-        P1 = diag(sqrt( norm_psi_internal_squared./diag(psi1_psi1) ));
-        P2 = diag(sqrt( diag(psi1_psi1)/norm_psi_internal_squared  ));
-        Xo = Xo*P1;
-        Xtildeo = Xtildeo*P2;
+        P1psi = diag(sqrt( norm_psi_internal_squared./diag(psi1_psi1) ));
+        P2psi = diag(sqrt( diag(psi1_psi1)/norm_psi_internal_squared  ));
+        Xo = Xo*P1psi;
+        Xtildeo = Xtildeo*P2psi;
     end
     
-    % Define preconditioning matrices
-    if Ntilde>N
-        C = [C zeros(size(C,1),Ntilde-N);zeros(Ntilde-N,N) eye(Ntilde-N)];
-    elseif Ntilde<N
-        Ctilde = [Ctilde zeros(size(Ctilde,1),N-Ntilde); zeros(N-Ntilde,Ntilde) eye(N-Ntilde)];
-    end
-    A_pre_inv = C( (end-Nprime+1):end, (end-Nprime+1):end );
-    Atilde_pre_inv = Ctilde( (end-Nprime+1):end, (end-Nprime+1):end );
+    A_pre_inv = C( (end-N+1):end, (end-N+1):end );
+    Atilde_pre_inv = Ctilde( (end-Ntilde+1):end, (end-Ntilde+1):end );
+    
+    [Xe,Xtildee]=expand_cols_smallest([Xe; Ze],[Xtildee; Ztildee]);
     
     % Assemble W and Wtilde
     [Xe, Xo] = expand_cols_smallest(Xe, Xo); X = [Xe Xo];
@@ -315,9 +310,13 @@ function [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo, Z
     psi1_psi1 = (2/sum(g0)^2)*Xo'*phi1_phi1*Xo + Zo'*phi2_phi2*Zo + combined + combined';
 end
 
-function [L,U]=lu_nopivot(A)
+function [L,U]=lu_nopivot(A, symbolic)
     [m,n] = size(A); s= min(m,n);
-    L = zeros(m,s); U = zeros(s,n);
+    if symbolic
+        L = sym(zeros(m,s)); U = sym(zeros(s,n));
+    else
+        L = zeros(m,s); U = zeros(s,n);
+    end
     for k=1:s
         L(:,k) = A(:,k) /A(k,k);
         U(k,:) = A(k,:);
@@ -328,5 +327,38 @@ function [L,U]=lu_nopivot(A)
     end
     if m<n
         U = [U; [zeros(n-m,m) eye(n-m)]];
+    end
+end
+
+function [Q,R]=qr_exact(A, symbolic)
+    if symbolic
+        n=size(A,1);
+        Q= sym(zeros(n)); Q(:,1)=A(:,1);
+        R=sym(eye(n));
+        for j=2:n
+            Q(:,j) = A(:,j) - Q(:,1:(j-1))*R(1:(j-1),j);
+            R(j,(j+1):n) = Q(:,j)'*A(:,(j+1):n);
+            R(j,(j+1):n) = R(j,(j+1):n)/(Q(:,j)'*Q(:,j));
+        end
+    else
+        [Q,R]=qr(A);
+    end
+end
+
+function [R,jb] = rref_exact(A, symbolic)
+    if symbolic 
+        R = rref(A);
+        [m,n]=size(A);
+        jb=sym([]);
+        for k=1:m
+            nonzeroes=find(R(k,:));
+            if ~isempty(nonzeroes)
+                jb = [jb nonzeroes(1)];
+            else
+                break;
+            end
+        end
+    else 
+        [R,jb] = rref(A);
     end
 end
