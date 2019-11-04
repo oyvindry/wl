@@ -63,6 +63,7 @@ function [f, prefilter, offset_L, offset_R]=wl_find_kernel(wave_name, length_sig
         N = str2double(wave_name(7));
         Ntilde = str2double(wave_name(9));
         [g0,h0]=compute_spline_filters(N, Ntilde);
+        args = {'symbolic', 1, varargin{:}};
     else
         throw(MException('WL:wavelet_not_supported', 'Wavelet not supported'));
     end
