@@ -4,13 +4,14 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     Nprime = max(N,Ntilde);
     [L,R]=findsupports(g0);
     [Ltilde,Rtilde]=findsupports(g0tilde);
-    N0=max( [ceil((2*N-K-1+Rtilde)/2) ceil((2*Ntilde-Ktilde-1+R)/2) R Rtilde]); % Equation (5.1)
+    N0      = max( [ceil((2*N-K-1+Rtilde)/2) R]); % testing 
+    N0tilde = max( [ceil((2*Ntilde-Ktilde-1+R)/2) Rtilde]); % testing
     
     S = [1:(K-N+R) (K-N+R+2):2:(K-N-R+2*N0)]; S = S'; % Defined in Lemma 5.2
-    Stilde = [1:(Ktilde-Ntilde+Rtilde) (Ktilde-Ntilde+Rtilde+2):2:(Ktilde-Ntilde-Rtilde+2*N0)]; Stilde = Stilde';
+    Stilde = [1:(Ktilde-Ntilde+Rtilde) (Ktilde-Ntilde+Rtilde+2):2:(Ktilde-Ntilde-Rtilde+2*N0tilde)]; Stilde = Stilde';
     
-    T      = N0 + floor(-(R+Ltilde+1)/2); % Equation (5.3)
-    Ttilde = N0 + floor(-(Rtilde+L+1)/2);
+    T      = N0      + floor(-(R+Ltilde+1)/2); % Equation (5.3)
+    Ttilde = N0tilde + floor(-(Rtilde+L+1)/2);
     T = max(T, Nprime); % TODO: add to the paper.
     Ttilde = max(Ttilde, Nprime);
 
@@ -108,7 +109,7 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     G = [Rmatr newcols];
     
     lastmatr = Gtilde*(G(Stilde,:))';
-    idmatr = eye(Stilde(N0+K-N));
+    idmatr = eye(Stilde(N0tilde+K-N));
     idmatr = idmatr(:,Stilde);
     [idmatr,lastmatr]=expand_cols_smallest(idmatr,lastmatr);
     Xtildeo = idmatr - lastmatr;
@@ -150,10 +151,14 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     
         Xo = double(Xo); 
         Xo(1:min(N,Ntilde),:) =           double(P2phi(1:min(N,Ntilde),1:min(N,Ntilde))*Xo(1:min(N,Ntilde),:));
+        Xtildeo = double(Xtildeo);
         Xtildeo(1:min(N,Ntilde),:) = double(P1phi(1:min(N,Ntilde),1:min(N,Ntilde))*Xtildeo(1:min(N,Ntilde),:)); 
         [psi1_psi1, norm_psi_internal_squared]=find_psi_grammian(L, R, K, Xo(1:N,:), Xo((N+1):end,:), phi1_phi1, C, g0, g1);
-        P1psi = diag(sqrt( norm_psi_internal_squared./diag(psi1_psi1) ));
-        P2psi = diag(sqrt( diag(psi1_psi1)/norm_psi_internal_squared  ));
+        P1psi = eye(length(S)); P2psi = eye(length(Stilde));
+        for k=1:min(length(S),length(Stilde))
+            P1psi(k,k) = sqrt( norm_psi_internal_squared/psi1_psi1(k,k) );
+            P2psi(k,k) = sqrt( psi1_psi1(k,k)/norm_psi_internal_squared );
+        end
         Xo = Xo*P1psi;
         Xtildeo = Xtildeo*P2psi;
     end
@@ -165,10 +170,10 @@ function [W,Wtilde, A_pre_inv, Atilde_pre_inv, N0, C, Ctilde]=bw_compute_left(g0
     
     % Assemble W and Wtilde
     [Xe, Xo] = expand_cols_smallest(Xe, Xo); X = [Xe Xo];
-    W=     assembleW(Xe,      Xo,      g0,      L:R,           g1,      (-Rtilde):(-Ltilde), K - N, N,      N0, symbolic);
+    W=     assembleW(Xe,      Xo,      g0,      L:R,           g1,      (-Rtilde):(-Ltilde), K - N, N,      N0,      max(N0,N0tilde), symbolic);
     
     [Xtildee, Xtildeo] = expand_cols_smallest(Xtildee, Xtildeo); Xtilde = [Xtildee Xtildeo];
-    Wtilde=assembleW(Xtildee, Xtildeo, g0tilde, Ltilde:Rtilde, g1tilde, (-R):(-L),           K - N, Ntilde, N0, symbolic);
+    Wtilde=assembleW(Xtildee, Xtildeo, g0tilde, Ltilde:Rtilde, g1tilde, (-R):(-L),           K - N, Ntilde, N0tilde, max(N0,N0tilde), symbolic);
     
     [W, Wtilde]=expand_cols_smallest(W, Wtilde);
     % only dyadic fractions?
@@ -197,8 +202,8 @@ function [L,R]=findsupports(g0)
     end
 end
 
-function W=assembleW(Xe, Xo, g0, suppg0, g1, suppg1, KminN, N, N0, symbolic)
-    numcols = KminN + 2*max(N,N0);
+function W=assembleW(Xe, Xo, g0, suppg0, g1, suppg1, KminN, N, N0, N0prime, symbolic)
+    numcols = KminN + 2*max(N,N0prime);
     if symbolic
         W = sym(zeros(size(Xe,1),numcols));
     else
@@ -208,17 +213,21 @@ function W=assembleW(Xe, Xo, g0, suppg0, g1, suppg1, KminN, N, N0, symbolic)
     W(:,KminN     + 2*(1:N0)) = Xo(:,(KminN+1):end);  % the remaining psi-functions
     W(:,KminN - 1 + 2*(1:N))  = Xe;                 % all phi functions
     
-    if N > N0  % Add internal psi-functions in W
-        % Add coordinates of \bpsi_{0,N_0},...,\bpsi_{0,N'-1}^b in phi_1^b. These come at columns (K-N+2N0+1):(K-N+2(N'-1)+1)
-        insertpsi = Gsegment(g1, suppg1, 0:(KminN + 2*(N-1) + 1 + suppg1(end)), KminN + 2*(N0:(N-1)) + 1, symbolic);
+    if N0prime>N0 % Add internal psi-functions in W
+        insertpsi = Gsegment(g1, suppg1, 0:(KminN + 2*(N0prime-1) + 1 + suppg1(end)), KminN + 2*(N0:(N0prime-1)) + 1, symbolic);
         [W, insertpsi] = expand_cols_smallest(W, insertpsi);
-        W( :, KminN + 2*(N0:(N-1)) + 2) = insertpsi;
+        W( :, KminN + 2*(N0:(N0prime-1)) + 2) = insertpsi;
     end
-    if N0 > N % Add internal phi-functions in W
-        % Add coordinates of \bphi_{0,N'},...,\bphi_{0,N0-1}^b in phi_1^b. These come at columns (K-N+2N'):(K-N+2(N0-1))
-        insertphi = Gsegment(g0, suppg0, 0:(KminN + 2*(N0-1) + suppg0(end)), KminN + 2*(N:(N0-1)), symbolic);
+    
+    if N > N0prime  % Add internal psi-functions in W
+        insertpsi = Gsegment(g1, suppg1, 0:(KminN + 2*(N-1) + 1 + suppg1(end)), KminN + 2*(N0prime:(N-1)) + 1, symbolic);
+        [W, insertpsi] = expand_cols_smallest(W, insertpsi);
+        W( :, KminN + 2*(N0prime:(N-1)) + 2) = insertpsi;
+    end
+    if N0prime > N % Add internal phi-functions in W
+        insertphi = Gsegment(g0, suppg0, 0:(KminN + 2*(N0prime-1) + suppg0(end)), KminN + 2*(N:(N0prime-1)), symbolic);
         [W, insertphi] = expand_cols_smallest(W, insertphi);
-        W( :, KminN + 2*(N:(N0-1)) + 1) = insertphi;
+        W( :, KminN + 2*(N:(N0prime-1)) + 1) = insertphi;
     end
 end
 
