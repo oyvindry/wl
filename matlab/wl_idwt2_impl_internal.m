@@ -1,31 +1,35 @@
-function x=idwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, varargin)
+function x=idwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets,  m, bd_mode, data_layout)
     % Compute a 2D IDWT using precomputed kernels. The kernels may be the default library kernels obtained by calling find_kernel, 
     % or may be used-defined.
     %
     % x:         Matrix whose IDWT2 will be computed along the first dimensions. 
     % fx, fy:    kernel functions     
     % prefilterx, prefiltery: functions which compute prefiltering. The default is no prefiltering.
-    % offsets:   offsets at the beginning and the end as used by boundary wavelets. Default: zeros.
-    %
-    % This function also accepts a number of named, optional parameters. These are parsed by the function wl_setopts(). 
-    % The documentation of this function also contains the full documentation of these optional parameters.
+    % offsets:   offsets at the beginning and the end as used by boundary wavelets. 
+    % m:              Number of resolutions. 
+    % bd_mode:        Boundary extension mode. Possible modes are. 
+    %                 'per'    - Periodic extension 
+    %                 'symm'   - Symmetric extension 
+    %                 'none'   - Take no extra action at the boundaries (i.e., the boundaries are zero-padded)
+    %                 'bd'     - Preserve vanishing moments at the boundaries
+    % data_layout:    How data should be assembled. Possible modes are:
+    %                 'resolution': Lowest resolution first
+    %                 'time': Sort according to time
     
-    opts = wl_setopts('wave_name', 'unknown', 'dims', 2, varargin{:});
-    
-    [x, resstart, resend] = reorganize_coeffs2_reverse(x, opts.m, offsets, opts.data_layout);
+    [x, resstart, resend] = reorganize_coeffs2_reverse(x, m, offsets, data_layout);
     % postconditioning
-    indsx = resstart(1,opts.m+1):2^opts.m:resend(1,opts.m+1); indsy = resstart(2,opts.m+1):2^opts.m:resend(2,opts.m+1);
-    % x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), opts.bd_mode);
+    indsx = resstart(1,m+1):2^m:resend(1,m+1); indsy = resstart(2,m+1):2^m:resend(2,m+1);
+    % x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), bd_mode);
 
-    for res = (opts.m - 1):(-1):0
+    for res = (m - 1):(-1):0
         indsx = resstart(1,res+1):2^res:resend(1,res+1); 
         indsy = resstart(2,res+1):2^res:resend(2,res+1);
-        x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), fx, fy, opts.bd_mode);
+        x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), fx, fy, bd_mode);
     end
     
     % preconditioning
     indsx = resstart(1,1):resend(1,1); indsy = resstart(2,1):resend(2,1);
-    x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), opts.bd_mode);
+    x(indsx, indsy, :) = tensor2_impl(x(indsx, indsy, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), bd_mode);
 end
 
 function [sig_out, resstart, resend]=reorganize_coeffs2_reverse(sig_in, m, offsets, data_layout)

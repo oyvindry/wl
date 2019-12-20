@@ -101,7 +101,10 @@ function [A_L,A_R]=find_AL_AR(WL, WR, wp, f)
     end
     
     x1 = eye(M);
-    x1 = wl_idwt1_impl_internal(x1, f, @(x, bdm) x, [wp.offset_L wp.offset_R], 'bd_mode', 'none', 'data_layout', 'time');
+    m = 1;
+    bd_mode = 'none';
+    data_layout = 'time';
+    x1 = wl_idwt1_impl_internal(x1, f, @(x, bdm) x, [wp.offset_L wp.offset_R], m, bd_mode, data_layout);
     [w1, w2] = size(WL); A_L = WL - x1(1:w1,1:w2);
     [w1, w2] = size(WR); A_R = WR - x1((M-w1+1):M,(M-w2+1):M);
     A_L = double(A_L); A_R = double(A_R);

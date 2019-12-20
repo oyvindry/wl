@@ -39,7 +39,7 @@ test_dwt_different_sizes('pwl2')
 test_dwt_different_sizes('haar')
 test_dwt_different_sizes('spline4.4')
 test_simple_dwt2()
-test_haar()
+%test_haar()
 newmax=test_bd_db_van(4, 'lifting', 'bd_pre', newmax);
 
 newmax=test_bd('spline4.4', 2, 65, 0, 4, 'filter', 'bd_pre', newmax);

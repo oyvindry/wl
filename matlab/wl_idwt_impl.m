@@ -34,36 +34,41 @@ function x=wl_idwt_impl(x, wave_name, varargin)
     % This function also accepts a number of named, optional parameters. These are parsed by the function wl_setopts(). 
     % The documentation of this function also contains the full documentation of these optional parameters.
     
-    args = {'wave_name', wave_name, 'dims', length(size(x))-1, varargin{:}};
+    dims = length(size(x))-1;
+    data_size = size(x);
+    args = {'dims', dims, varargin{:}};
     opts = wl_setopts(args{:});
 
-    [fx, prefilterx, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,1), 0, args{:});
-    offsets = [offset_L offset_R];
-    if opts.dims == 1
-        if opts.transpose % if transpose, then f will we a dwt_kernel, 
-            x =  wl_dwt1_impl_internal(x, fx, prefilterx, offsets, args{:});     
-        else
-            x = wl_idwt1_impl_internal(x, fx, prefilterx, offsets, args{:});
-        end
-    else
-        [fy, prefiltery, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,2), 0, args{:});
-        offsets = [offsets; offset_L offset_R];
-        if opts.dims == 2
-            if opts.transpose % if transpose, then f will we a dwt_kernel, 
-                x =  wl_dwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, args{:});
-            else
-                x = wl_idwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, args{:});
-            end
-        else
-            [fz, prefilterz, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,3), 0, args{:});
-            offsets = [offsets; offset_L offset_R];
-            if opts.dims == 3 % if not give error message
-                if opts.transpose % if transpose, then f will we a dwt_kernel, 
-                    x =  wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, args{:});     
-                else
-                    x = wl_idwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, args{:});
-                end
-            end
-        end
-    end         
+    idwt_kernel = wl_idwt_kernel(wave_name, data_size, opts.dims, varargin{:});
+    x = wl_idwt_impl_from_kernel(x, idwt_kernel);
+
+    %[fx, prefilterx, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,1), 0, args{:});
+    %offsets = [offset_L offset_R];
+    %if opts.dims == 1
+    %    if opts.transpose % if transpose, then f will we a dwt_kernel, 
+    %        x =  wl_dwt1_impl_internal(x, fx, prefilterx, offsets, args{:});     
+    %    else
+    %        x = wl_idwt1_impl_internal(x, fx, prefilterx, offsets, args{:});
+    %    end
+    %else
+    %    [fy, prefiltery, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,2), 0, args{:});
+    %    offsets = [offsets; offset_L offset_R];
+    %    if opts.dims == 2
+    %        if opts.transpose % if transpose, then f will we a dwt_kernel, 
+    %            x =  wl_dwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, args{:});
+    %        else
+    %            x = wl_idwt2_impl_internal(x, fx, fy, prefilterx, prefiltery, offsets, args{:});
+    %        end
+    %    else
+    %        [fz, prefilterz, offset_L, offset_R] = wl_find_kernel(wave_name, size(x,3), 0, args{:});
+    %        offsets = [offsets; offset_L offset_R];
+    %        if opts.dims == 3 % if not give error message
+    %            if opts.transpose % if transpose, then f will we a dwt_kernel, 
+    %                x =  wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, args{:});     
+    %            else
+    %                x = wl_idwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, args{:});
+    %            end
+    %        end
+    %    end
+    %end         
 end

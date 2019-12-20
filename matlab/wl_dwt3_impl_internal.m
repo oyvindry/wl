@@ -1,4 +1,4 @@
-function x = wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, varargin)
+function x = wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefilterz, offsets, m, bd_mode, data_layout)
     % Compute a 3D DWT using precomputed kernels. The kernels may be the default library kernels obtained by calling find_kernel, 
     % or may be used-defined.
     %
@@ -6,28 +6,32 @@ function x = wl_dwt3_impl_internal(x, fx, fy, fz, prefilterx, prefiltery, prefil
     % fx, fy, fz: kernel functions     
     % prefilterx, prefiltery, prefilterz: functions which compute prefiltering. The default is no prefiltering.
     % offsets:   offsets at the beginning and the end as used by boundary wavelets. Default: zeros.
-    %
-    % This function also accepts a number of named, optional parameters. These are parsed by the function wl_setopts(). 
-    % The documentation of this function also contains the full documentation of these optional parameters.
-    
-    opts = wl_setopts('wave_name', 'unknown', 'dims', 3, varargin{:});
+    % m:              Number of resolutions. 
+    % bd_mode:        Boundary extension mode. Possible modes are. 
+    %                 'per'    - Periodic extension 
+    %                 'symm'   - Symmetric extension 
+    %                 'none'   - Take no extra action at the boundaries (i.e., the boundaries are zero-padded)
+    %                 'bd'     - Preserve vanishing moments at the boundaries
+    % data_layout:    How data should be assembled. Possible modes are:
+    %                 'resolution': Lowest resolution first
+    %                 'time': Sort according to time
     
     indsx = 1:size(x,1); indsy = 1:size(x,2); indsz = 1:size(x,3);
 
     % preconditioning   
-    x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), @(x,bdm) prefilterz(x, 1), opts.bd_mode);
+    x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 1), @(x,bdm) prefiltery(x, 1), @(x,bdm) prefilterz(x, 1), bd_mode);
          
-    for res = 0:(opts.m - 1)
-        x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), fx, fy, fz, opts.bd_mode);  
+    for res = 0:(m - 1)
+        x(indsx, indsy, indsz, :) = tensor3_impl(x(indsx, indsy, indsz, :), fx, fy, fz, bd_mode);  
         indsx = indsx((offsets(1,1)+1):2:(end-offsets(1,2)));   
         indsy = indsy((offsets(2,1)+1):2:(end-offsets(2,2)));
         indsz = indsz((offsets(3,1)+1):2:(end-offsets(3,2)));
     end
     
     % postconditioning
-    % x(indsx, indsy, indsz,:) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), @(x,bdm) prefilterz(x, 0), opts.bd_mode);  
+    % x(indsx, indsy, indsz,:) = tensor3_impl(x(indsx, indsy, indsz, :), @(x,bdm) prefilterx(x, 0), @(x,bdm) prefiltery(x, 0), @(x,bdm) prefilterz(x, 0), bd_mode);  
     
-    x = reorganize_coeffs3_forward(x, opts.m, offsets, opts.data_layout);   
+    x = reorganize_coeffs3_forward(x, m, offsets, data_layout);   
 end
 
 function sig_out=reorganize_coeffs3_forward(sig_in, m, offsets, data_layout)
