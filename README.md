@@ -10,8 +10,8 @@ In particular we highlight the advantages of the implementation.
 
 ## Installation
 
-### MatLab
-Add the folder `matlab` to your MatLab path. To do this automatically on startup, add the folder to your 
+### MATLAB
+Add the folder `MATLAB` to your MATLAB path. To do this automatically on startup, add the folder to your 
 [startup.m file](https://ch.mathworks.com/help/matlab/matlab_env/what-is-the-matlab-search-path.html). 
 
 ## User guide to the discrete wavelet transform implementation
@@ -45,7 +45,7 @@ Likewise `bd_mode` can take the values
 Note that, when the `'bd'` mode is invoked, computations in the `'none'` mode are also performed by the software, in order to compute the tail handling components. 
 `prefilter_mode` can take the values
 * `'none'` : No prefiltering (default),
-* `'bd_pre'` : Boundary wavelets with preconditioning as described in XXXX (Only available in MatLab version) 
+* `'bd_pre'` : Boundary wavelets with preconditioning as described in XXXX (Only available in MATLAB version) 
 
 Not all combinations of these arguments make sense. For instance it is not possible to apply a symmetric boundary extension to an orthonormal
 wavelet. In such cases the functions halt, issuing an error. 
@@ -87,3 +87,27 @@ should be comparable with those of convolution, since the DWT/IDWT can be
 expressed in terms of this (and possibly lifting).
 
 Following the code above, it is possible to experiment with custom made kernels - simply implement your own kernel function (taking the same arguments as the ones defined in the software), and use it as input to `wl_dwt1_impl_internal`.
+
+## Citing
+When referencing the wl library, please consider to cite the following two references
+
+```
+@article{antun2021unification,
+  title={On the Unification of Schemes and Software for Wavelets on the Interval},
+  author={Antun, Vegard and Ryan, {\O}yvind},
+  journal={Acta Applicandae Mathematicae},
+  volume={173},
+  number={1},
+  pages={1--25},
+  year={2021},
+  publisher={Springer}
+}
+
+@book{ryan2019linear,
+  title={Linear Algebra, Signal Processing, and Wavelets--a Unified Approach},
+  author={Ryan, {\O}yvind and Ryan and Peters},
+  year={2019},
+  publisher={Springer}
+}
+```
+
